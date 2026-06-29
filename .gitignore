@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 node_modules/
 dist/
+logs/
 .DS_Store
 outputs/*.tmp
 design/*.png

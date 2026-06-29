@@ -13,7 +13,7 @@ The implementation supports:
 - Recruiter CSV export
 - ATS JSON blob
 - Recruiter notes TXT
-- GitHub profile URL enrichment through the public GitHub API, either from the URL field or from a GitHub URL found in uploaded text
+- GitHub profile, public repository, project, and language enrichment through the public GitHub API, either from the URL field or from a GitHub URL found in uploaded text
 - LinkedIn profile URL normalization/storage when a real `linkedin.com/...` URL is supplied
 - Structured resume projects with title, date, tech stack, links, and evidence bullets
 - Optional OpenRouter LLM extraction for messy text
@@ -87,7 +87,7 @@ This repo defaults to Flask `5055` and Vite `5177` to avoid collisions with the 
 
 The Vite dev server proxies `/api` to Flask on port `5055`.
 
-LinkedIn handling is intentionally conservative: the transformer stores and normalizes real LinkedIn URLs, but it does not scrape LinkedIn or guess a LinkedIn URL from a person's name. If LinkedIn-like profile facts are included in an uploaded source file, they can still be extracted from that source.
+GitHub repo enrichment is enabled by default and is bounded by `GITHUB_REPO_LIMIT` and `GITHUB_REPO_LANGUAGE_LIMIT`. LinkedIn handling is intentionally conservative: the transformer stores and normalizes real LinkedIn URLs, but it does not scrape LinkedIn or guess a LinkedIn URL from a person's name. If LinkedIn-like profile facts are included in an uploaded source file, they can still be extracted from that source.
 
 ## Tests
 
