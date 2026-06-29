@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from backend.transformer.facts import ExtractedFact, ExtractionBundle
 from backend.transformer.pipeline import transform_paths
 
 
@@ -177,3 +178,33 @@ Implemented Pagination and Dark/Light mode themes.
         "Dark Mode",
         "Light Mode",
     } <= skill_names
+
+
+def test_github_url_discovered_in_text_triggers_github_enrichment(tmp_path, monkeypatch):
+    resume = tmp_path / "github_resume.txt"
+    resume.write_text(
+        """
+Test Candidate Email: test@example.com
+GitHub: github.com/example-user
+""".strip(),
+        encoding="utf-8",
+    )
+
+    def fake_extract_github(url):
+        assert url == "https://github.com/example-user"
+        return ExtractionBundle(
+            [
+                ExtractedFact("links.github", "https://github.com/example-user", "github:example-user", "github-url", 0.9),
+                ExtractedFact("full_name", "Example User", "github:example-user", "github-api:name", 0.72),
+                ExtractedFact("headline", "Open source developer", "github:example-user", "github-api:bio", 0.62),
+            ],
+            [],
+        )
+
+    monkeypatch.setattr("backend.transformer.pipeline.extract_github", fake_extract_github)
+    profile = transform_paths([resume], default_region="US")["default_profile"]
+
+    assert profile["links"]["github"] == "https://github.com/example-user"
+    assert profile["full_name"] == "Test Candidate"
+    assert profile["headline"] == "Open source developer"
+    assert any(item["source"] == "github:example-user" for item in profile["provenance"])

@@ -8,6 +8,7 @@ import {
   Github,
   GraduationCap,
   Link as LinkIcon,
+  ListChecks,
   Loader2,
   Mail,
   MapPin,
@@ -132,6 +133,40 @@ function TextChips({ items = [] }) {
           {item}
         </span>
       ))}
+    </div>
+  );
+}
+
+function MergeTrust({ profile }) {
+  if (!profile?.provenance?.length) return null;
+  const rows = [...profile.provenance]
+    .sort((left, right) => (right.confidence || 0) - (left.confidence || 0))
+    .slice(0, 18);
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <ListChecks size={16} />
+        Merge & Trust
+      </div>
+      <div className="overflow-hidden rounded-md border border-line">
+        <div className="grid grid-cols-[1.1fr_1.4fr_1.2fr_80px] border-b border-line bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+          <div>Field</div>
+          <div>Source</div>
+          <div>Method</div>
+          <div className="text-right">Conf.</div>
+        </div>
+        <div className="max-h-72 overflow-auto divide-y divide-line">
+          {rows.map((row, index) => (
+            <div key={`${row.field}-${row.source}-${index}`} className="grid grid-cols-[1.1fr_1.4fr_1.2fr_80px] gap-2 px-3 py-2 text-xs text-slate-700">
+              <div className="font-medium text-slate-900">{cleanInlineText(row.field)}</div>
+              <div className="break-words">{cleanInlineText(row.source)}</div>
+              <div className="break-words">{cleanInlineText(row.method)}</div>
+              <div className="text-right font-semibold">{Number(row.confidence || 0).toFixed(2)}</div>
+              {row.evidence && <div className="col-span-4 text-slate-500">Evidence: {cleanInlineText(row.evidence)}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -298,6 +333,8 @@ function CleanProfile({ profile }) {
           <div className="mb-2 text-sm font-semibold">Skills</div>
           <SkillChips skills={profile.skills || []} />
         </div>
+
+        <MergeTrust profile={profile} />
       </div>
     </section>
   );

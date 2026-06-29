@@ -56,6 +56,14 @@ def normalize_fact(fact: ExtractedFact, default_region: str) -> ExtractedFact | 
     return fact
 
 
+def normalize_facts(facts: Iterable[ExtractedFact], default_region: str) -> list[ExtractedFact]:
+    return [
+        normalized
+        for fact in facts
+        if (normalized := normalize_fact(fact, default_region)) is not None
+    ]
+
+
 def transform_paths(
     paths: Iterable[Path],
     config: dict | None = None,
@@ -91,11 +99,18 @@ def transform_paths(
     if linkedin_url:
         raw_facts.append(ExtractedFact("links.linkedin", linkedin_url, "input:linkedin", "user-supplied-url", 0.9))
 
-    normalized_facts = [
-        normalized
-        for fact in raw_facts
-        if (normalized := normalize_fact(fact, default_region)) is not None
-    ]
+    normalized_facts = normalize_facts(raw_facts, default_region)
+
+    fetched_github_urls = {fact.value for fact in normalized_facts if fact.field == "links.github" and fact.source.startswith("github:")}
+    discovered_github_urls = {
+        fact.value
+        for fact in normalized_facts
+        if fact.field == "links.github" and fact.value not in fetched_github_urls
+    }
+    for discovered_url in sorted(discovered_github_urls):
+        bundle = extract_github(discovered_url)
+        normalized_facts.extend(normalize_facts(bundle.facts, default_region))
+        extraction_errors.extend(bundle.errors)
 
     default_profile = merge_facts(normalized_facts, extraction_errors)
     default_profile["resume_sections"] = extract_resume_sections(source_texts)

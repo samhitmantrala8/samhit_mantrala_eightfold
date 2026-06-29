@@ -353,6 +353,18 @@
         "evidence": "openrouter"
       },
       {
+        "field": "links.github",
+        "source": "github:samhitmantrala8",
+        "method": "github-url",
+        "confidence": 0.91
+      },
+      {
+        "field": "full_name",
+        "source": "github:samhitmantrala8",
+        "method": "github-api:name",
+        "confidence": 0.73
+      },
+      {
         "field": "profile_summary",
         "source": "local-fallback",
         "method": "deterministic-profile-summary",
@@ -602,6 +614,18 @@
         "method": "notes-skill-alias-fuzzy",
         "confidence": 0.8,
         "evidence": "openrouter"
+      },
+      {
+        "field": "links.github",
+        "source": "github:samhitmantrala8",
+        "method": "github-url",
+        "confidence": 0.91
+      },
+      {
+        "field": "full_name",
+        "source": "github:samhitmantrala8",
+        "method": "github-api:name",
+        "confidence": 0.73
       },
       {
         "field": "profile_summary",
