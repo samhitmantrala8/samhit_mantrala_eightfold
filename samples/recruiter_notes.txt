@@ -1,0 +1,9 @@
+Candidate: Samhit Mantrala
+Headline: Full-stack engineer focused on React, Flask, and AI data products.
+The candidate has 2+ years of hands-on project experience. Built candidate transformer prototypes with Python, Flask, ReactJS, Tailwind CSS, PostgreSQL, REST APIs, OpenRouter, embeddings, and RAG evaluation.
+Worked as Backend Developer at Campus Projects Team.
+Email mentioned in notes: samhit.mantrala@example.com
+Phone mentioned in notes: +1 415-555-0198
+GitHub: https://github.com/samhitmantrala8
+LinkedIn: https://linkedin.com/in/samhitmantrala
+

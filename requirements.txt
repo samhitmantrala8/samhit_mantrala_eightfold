@@ -1,0 +1,8 @@
+Flask==3.0.3
+flask-cors==4.0.1
+python-dotenv==1.0.1
+phonenumbers==8.13.42
+python-dateutil==2.9.0.post0
+rapidfuzz==3.9.6
+requests==2.32.3
+pytest==8.3.2

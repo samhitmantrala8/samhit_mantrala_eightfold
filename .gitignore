@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.pyc
+node_modules/
+dist/
+.DS_Store
+outputs/*.tmp
+design/*.png
+.runtime/

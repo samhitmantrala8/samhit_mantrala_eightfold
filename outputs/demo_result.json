@@ -1,0 +1,547 @@
+{
+  "default_profile": {
+    "candidate_id": "cand_1fc0f749ab1f",
+    "full_name": "Samhit Mantrala",
+    "emails": [
+      "samhit.mantrala@example.com"
+    ],
+    "phones": [
+      "+14155550198"
+    ],
+    "location": {
+      "city": "San Francisco",
+      "region": "CA",
+      "country": "US"
+    },
+    "links": {
+      "linkedin": "https://linkedin.com/in/samhitmantrala",
+      "github": "https://github.com/samhitmantrala8",
+      "portfolio": null,
+      "other": []
+    },
+    "headline": "Full-stack engineer building data and AI products",
+    "years_experience": 2.0,
+    "skills": [
+      {
+        "name": "Embeddings",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "Flask",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "OpenRouter",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "PostgreSQL",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "Python",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "RAG",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "REST APIs",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "React",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      },
+      {
+        "name": "Tailwind CSS",
+        "confidence": 0.8,
+        "sources": [
+          "notes:recruiter_notes.txt"
+        ]
+      }
+    ],
+    "experience": [
+      {
+        "company": "Eightfold AI",
+        "title": "Software Engineering Intern",
+        "start": "2026-07",
+        "end": "2026-12",
+        "summary": "Engineering internship focused on candidate data transformation."
+      },
+      {
+        "company": "Campus Projects Team.",
+        "title": "Backend Developer",
+        "start": null,
+        "end": null,
+        "summary": "Worked as Backend Developer at Campus Projects Team."
+      }
+    ],
+    "education": [
+      {
+        "institution": "Example University",
+        "degree": "B.Tech",
+        "field": "Computer Science",
+        "end_year": 2026
+      }
+    ],
+    "provenance": [
+      {
+        "field": "full_name",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:name",
+        "confidence": 0.95
+      },
+      {
+        "field": "emails",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:email",
+        "confidence": 0.99
+      },
+      {
+        "field": "phones",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:phone",
+        "confidence": 0.95
+      },
+      {
+        "field": "experience",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-current-role",
+        "confidence": 0.83
+      },
+      {
+        "field": "headline",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:title",
+        "confidence": 0.77
+      },
+      {
+        "field": "full_name",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:name",
+        "confidence": 0.98
+      },
+      {
+        "field": "emails",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:email",
+        "confidence": 0.99
+      },
+      {
+        "field": "phones",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:phone",
+        "confidence": 0.98
+      },
+      {
+        "field": "headline",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:headline",
+        "confidence": 0.86
+      },
+      {
+        "field": "location.city",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:location.city",
+        "confidence": 0.88
+      },
+      {
+        "field": "location.region",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:location.region",
+        "confidence": 0.88
+      },
+      {
+        "field": "location.country",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:location.country",
+        "confidence": 0.88
+      },
+      {
+        "field": "experience",
+        "source": "ats:ats_profile.json#experience1",
+        "method": "ats-field:experience",
+        "confidence": 0.9
+      },
+      {
+        "field": "education",
+        "source": "ats:ats_profile.json#education1",
+        "method": "ats-field:education",
+        "confidence": 0.88
+      },
+      {
+        "field": "full_name",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:name",
+        "confidence": 0.66,
+        "evidence": "Candidate: Samhit Mantrala"
+      },
+      {
+        "field": "headline",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:headline",
+        "confidence": 0.63,
+        "evidence": "Headline: Full-stack engineer focused on React, Flask, and AI data products."
+      },
+      {
+        "field": "emails",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:email",
+        "confidence": 0.8,
+        "evidence": "samhit.mantrala@example.com"
+      },
+      {
+        "field": "phones",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:phone",
+        "confidence": 0.7,
+        "evidence": "+1 415-555-0198"
+      },
+      {
+        "field": "links.github",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:url",
+        "confidence": 0.76,
+        "evidence": "https://github.com/samhitmantrala8"
+      },
+      {
+        "field": "links.linkedin",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:url",
+        "confidence": 0.76,
+        "evidence": "https://linkedin.com/in/samhitmantrala"
+      },
+      {
+        "field": "years_experience",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:years",
+        "confidence": 0.6,
+        "evidence": "2+ years"
+      },
+      {
+        "field": "experience",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:experience",
+        "confidence": 0.56,
+        "evidence": "Worked as Backend Developer at Campus Projects Team."
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "python"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "flask"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "react"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "tailwind"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "rest"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "postgresql"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "embeddings"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "rag"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "openrouter"
+      }
+    ],
+    "overall_confidence": 0.922,
+    "extraction_errors": []
+  },
+  "custom_output": {
+    "full_name": "Samhit Mantrala",
+    "primary_email": "samhit.mantrala@example.com",
+    "phone": "+14155550198",
+    "github": "https://github.com/samhitmantrala8",
+    "skills": [
+      "Embeddings",
+      "Flask",
+      "OpenRouter",
+      "PostgreSQL",
+      "Python",
+      "RAG",
+      "REST APIs",
+      "React",
+      "Tailwind CSS"
+    ],
+    "current_company": "Eightfold AI",
+    "overall_confidence": 0.922,
+    "provenance": [
+      {
+        "field": "full_name",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:name",
+        "confidence": 0.95
+      },
+      {
+        "field": "emails",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:email",
+        "confidence": 0.99
+      },
+      {
+        "field": "phones",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:phone",
+        "confidence": 0.95
+      },
+      {
+        "field": "experience",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-current-role",
+        "confidence": 0.83
+      },
+      {
+        "field": "headline",
+        "source": "csv:recruiter_export.csv#row1",
+        "method": "csv-column:title",
+        "confidence": 0.77
+      },
+      {
+        "field": "full_name",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:name",
+        "confidence": 0.98
+      },
+      {
+        "field": "emails",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:email",
+        "confidence": 0.99
+      },
+      {
+        "field": "phones",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:phone",
+        "confidence": 0.98
+      },
+      {
+        "field": "headline",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:headline",
+        "confidence": 0.86
+      },
+      {
+        "field": "location.city",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:location.city",
+        "confidence": 0.88
+      },
+      {
+        "field": "location.region",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:location.region",
+        "confidence": 0.88
+      },
+      {
+        "field": "location.country",
+        "source": "ats:ats_profile.json",
+        "method": "ats-field:location.country",
+        "confidence": 0.88
+      },
+      {
+        "field": "experience",
+        "source": "ats:ats_profile.json#experience1",
+        "method": "ats-field:experience",
+        "confidence": 0.9
+      },
+      {
+        "field": "education",
+        "source": "ats:ats_profile.json#education1",
+        "method": "ats-field:education",
+        "confidence": 0.88
+      },
+      {
+        "field": "full_name",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:name",
+        "confidence": 0.66,
+        "evidence": "Candidate: Samhit Mantrala"
+      },
+      {
+        "field": "headline",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:headline",
+        "confidence": 0.63,
+        "evidence": "Headline: Full-stack engineer focused on React, Flask, and AI data products."
+      },
+      {
+        "field": "emails",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:email",
+        "confidence": 0.8,
+        "evidence": "samhit.mantrala@example.com"
+      },
+      {
+        "field": "phones",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:phone",
+        "confidence": 0.7,
+        "evidence": "+1 415-555-0198"
+      },
+      {
+        "field": "links.github",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:url",
+        "confidence": 0.76,
+        "evidence": "https://github.com/samhitmantrala8"
+      },
+      {
+        "field": "links.linkedin",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:url",
+        "confidence": 0.76,
+        "evidence": "https://linkedin.com/in/samhitmantrala"
+      },
+      {
+        "field": "years_experience",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:years",
+        "confidence": 0.6,
+        "evidence": "2+ years"
+      },
+      {
+        "field": "experience",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-regex:experience",
+        "confidence": 0.56,
+        "evidence": "Worked as Backend Developer at Campus Projects Team."
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "python"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "flask"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "react"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "tailwind"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "rest"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "postgresql"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "embeddings"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "rag"
+      },
+      {
+        "field": "skills",
+        "source": "notes:recruiter_notes.txt",
+        "method": "notes-skill-alias-fuzzy",
+        "confidence": 0.8,
+        "evidence": "openrouter"
+      }
+    ]
+  },
+  "extraction_errors": [],
+  "validation_errors": []
+}

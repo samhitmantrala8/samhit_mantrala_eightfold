@@ -1,0 +1,31 @@
+{
+  "candidateName": "Samhit Mantrala",
+  "contact": {
+    "email": "samhit.mantrala@example.com",
+    "phone": "+1 415 555 0198"
+  },
+  "headline": "Full-stack engineer building data and AI products",
+  "location": {
+    "city": "San Francisco",
+    "region": "CA",
+    "country": "US"
+  },
+  "experience": [
+    {
+      "companyName": "Eightfold AI",
+      "jobTitle": "Software Engineering Intern",
+      "startDate": "Jul 2026",
+      "endDate": "Dec 2026",
+      "summary": "Engineering internship focused on candidate data transformation."
+    }
+  ],
+  "education": [
+    {
+      "school": "Example University",
+      "degree": "B.Tech",
+      "major": "Computer Science",
+      "graduationYear": 2026
+    }
+  ]
+}
+

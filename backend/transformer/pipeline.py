@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Iterable
+
+from backend.transformer.extractors.ats_json_extractor import extract_ats_json
+from backend.transformer.extractors.csv_extractor import extract_csv
+from backend.transformer.extractors.github_extractor import extract_github
+from backend.transformer.extractors.notes_extractor import extract_notes
+from backend.transformer.facts import ExtractedFact, ExtractionBundle
+from backend.transformer.merge import merge_facts
+from backend.transformer.normalizers.contact import classify_link, normalize_email, normalize_phone, normalize_url
+from backend.transformer.normalizers.skills import canonicalize_skill
+from backend.transformer.projection import project_profile
+from backend.transformer.validation import validate_default_profile
+
+
+def extract_from_path(path: Path, use_llm: bool = False) -> ExtractionBundle:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return extract_csv(path)
+    if suffix == ".json":
+        return extract_ats_json(path)
+    if suffix in {".txt", ".md"}:
+        return extract_notes(path, use_llm=use_llm)
+    return ExtractionBundle([], [f"{path.name}: unsupported source type"])
+
+
+def normalize_fact(fact: ExtractedFact, default_region: str) -> ExtractedFact | None:
+    field = fact.field
+    value = fact.value
+    if field == "emails":
+        normalized = normalize_email(str(value))
+        return ExtractedFact(field, normalized, fact.source, fact.method, fact.confidence, fact.evidence) if normalized else None
+    if field == "phones":
+        normalized = normalize_phone(str(value), default_region)
+        return ExtractedFact(field, normalized, fact.source, fact.method, fact.confidence, fact.evidence) if normalized else None
+    if field.startswith("links."):
+        normalized = normalize_url(str(value))
+        if not normalized:
+            return None
+        return ExtractedFact(classify_link(normalized), normalized, fact.source, fact.method, fact.confidence, fact.evidence)
+    if field == "skills":
+        raw = value.get("name") if isinstance(value, dict) else str(value)
+        canonical = canonicalize_skill(str(raw))
+        if canonical:
+            return ExtractedFact(field, {"name": canonical[0]}, fact.source, fact.method, min(fact.confidence, canonical[1]), fact.evidence)
+        return None
+    if field == "years_experience":
+        try:
+            years = float(value)
+        except (TypeError, ValueError):
+            return None
+        return ExtractedFact(field, years, fact.source, fact.method, fact.confidence, fact.evidence)
+    return fact
+
+
+def transform_paths(
+    paths: Iterable[Path],
+    config: dict | None = None,
+    github_url: str | None = None,
+    default_region: str = "US",
+    use_llm: bool = False,
+) -> dict:
+    raw_facts: list[ExtractedFact] = []
+    extraction_errors: list[str] = []
+
+    for path in paths:
+        if not path.exists():
+            extraction_errors.append(f"{path}: missing input")
+            continue
+        bundle = extract_from_path(path, use_llm=use_llm)
+        raw_facts.extend(bundle.facts)
+        extraction_errors.extend(bundle.errors)
+
+    if github_url:
+        bundle = extract_github(github_url)
+        raw_facts.extend(bundle.facts)
+        extraction_errors.extend(bundle.errors)
+
+    normalized_facts = [
+        normalized
+        for fact in raw_facts
+        if (normalized := normalize_fact(fact, default_region)) is not None
+    ]
+
+    default_profile = merge_facts(normalized_facts, extraction_errors)
+    validation_errors = validate_default_profile(default_profile)
+    custom_output, projection_errors = project_profile(default_profile, config, default_region)
+
+    return {
+        "default_profile": default_profile,
+        "custom_output": custom_output if config else None,
+        "extraction_errors": extraction_errors,
+        "validation_errors": validation_errors + projection_errors,
+    }
+
