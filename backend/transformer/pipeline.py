@@ -12,6 +12,7 @@ from backend.transformer.merge import merge_facts
 from backend.transformer.normalizers.contact import classify_link, normalize_email, normalize_phone, normalize_url
 from backend.transformer.normalizers.skills import canonicalize_skill
 from backend.transformer.projection import project_profile
+from backend.transformer.summary import extract_resume_sections, generate_profile_summary
 from backend.transformer.validation import validate_default_profile
 
 
@@ -64,11 +65,19 @@ def transform_paths(
 ) -> dict:
     raw_facts: list[ExtractedFact] = []
     extraction_errors: list[str] = []
+    source_texts: list[str] = []
 
     for path in paths:
         if not path.exists():
             extraction_errors.append(f"{path}: missing input")
             continue
+        if path.suffix.lower() in {".txt", ".md"}:
+            try:
+                source_texts.append(path.read_text(encoding="utf-8"))
+            except UnicodeDecodeError:
+                source_texts.append(path.read_text(encoding="latin-1", errors="ignore"))
+            except Exception:
+                pass
         bundle = extract_from_path(path, use_llm=use_llm)
         raw_facts.extend(bundle.facts)
         extraction_errors.extend(bundle.errors)
@@ -85,6 +94,19 @@ def transform_paths(
     ]
 
     default_profile = merge_facts(normalized_facts, extraction_errors)
+    default_profile["resume_sections"] = extract_resume_sections(source_texts)
+    summary, summary_meta, summary_errors = generate_profile_summary(default_profile, source_texts)
+    default_profile["profile_summary"] = summary
+    default_profile["provenance"].append(
+        {
+            "field": "profile_summary",
+            "source": summary_meta["source"],
+            "method": summary_meta["method"],
+            "confidence": summary_meta["confidence"],
+        }
+    )
+    extraction_errors.extend(summary_errors)
+    default_profile["extraction_errors"] = extraction_errors
     validation_errors = validate_default_profile(default_profile)
     custom_output, projection_errors = project_profile(default_profile, config, default_region)
 
@@ -94,4 +116,3 @@ def transform_paths(
         "extraction_errors": extraction_errors,
         "validation_errors": validation_errors + projection_errors,
     }
-

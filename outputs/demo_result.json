@@ -104,6 +104,9 @@
       {
         "company": "Eightfold AI",
         "title": "Software Engineering Intern",
+        "role": null,
+        "location": null,
+        "duration": null,
         "start": "2026-07",
         "end": "2026-12",
         "summary": "Engineering internship focused on candidate data transformation."
@@ -111,6 +114,9 @@
       {
         "company": "Campus Projects Team.",
         "title": "Backend Developer",
+        "role": null,
+        "location": null,
+        "duration": null,
         "start": null,
         "end": null,
         "summary": "Worked as Backend Developer at Campus Projects Team."
@@ -121,9 +127,12 @@
         "institution": "Example University",
         "degree": "B.Tech",
         "field": "Computer Science",
-        "end_year": 2026
+        "end_year": 2026,
+        "cgpa": null
       }
     ],
+    "profile_summary": "Samhit Mantrala is a candidate educated at Example University with B.Tech in Computer Science. Experience includes Software Engineering Intern at Eightfold AI, Backend Developer at Campus Projects Team.. Key skills include Embeddings, Flask, GitHub, OpenRouter, PostgreSQL, Python, RAG, REST APIs, React, Tailwind CSS, Artificial Intelligence.",
+    "resume_sections": {},
     "provenance": [
       {
         "field": "full_name",
@@ -341,10 +350,18 @@
         "method": "notes-skill-alias-fuzzy",
         "confidence": 0.8,
         "evidence": "openrouter"
+      },
+      {
+        "field": "profile_summary",
+        "source": "local-fallback",
+        "method": "deterministic-profile-summary",
+        "confidence": 0.42
       }
     ],
     "overall_confidence": 0.919,
-    "extraction_errors": []
+    "extraction_errors": [
+      "profile_summary: OpenRouter keys not configured; used deterministic fallback"
+    ]
   },
   "custom_output": {
     "full_name": "Samhit Mantrala",
@@ -365,6 +382,7 @@
       "Tailwind CSS"
     ],
     "current_company": "Eightfold AI",
+    "profile_summary": "Samhit Mantrala is a candidate educated at Example University with B.Tech in Computer Science. Experience includes Software Engineering Intern at Eightfold AI, Backend Developer at Campus Projects Team.. Key skills include Embeddings, Flask, GitHub, OpenRouter, PostgreSQL, Python, RAG, REST APIs, React, Tailwind CSS, Artificial Intelligence.",
     "overall_confidence": 0.919,
     "provenance": [
       {
@@ -583,9 +601,17 @@
         "method": "notes-skill-alias-fuzzy",
         "confidence": 0.8,
         "evidence": "openrouter"
+      },
+      {
+        "field": "profile_summary",
+        "source": "local-fallback",
+        "method": "deterministic-profile-summary",
+        "confidence": 0.42
       }
     ]
   },
-  "extraction_errors": [],
+  "extraction_errors": [
+    "profile_summary: OpenRouter keys not configured; used deterministic fallback"
+  ],
   "validation_errors": []
 }

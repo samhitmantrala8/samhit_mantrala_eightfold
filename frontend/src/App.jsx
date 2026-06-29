@@ -1,5 +1,20 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, FileJson, Github, Loader2, Play, UploadCloud, XCircle } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CheckCircle2,
+  FileJson,
+  Github,
+  GraduationCap,
+  Link as LinkIcon,
+  Loader2,
+  Mail,
+  MapPin,
+  Phone,
+  Play,
+  Sparkles,
+  UploadCloud,
+  XCircle
+} from "lucide-react";
 
 const SAMPLE_CONFIG = `{
   "fields": [
@@ -26,6 +41,200 @@ function JsonPanel({ title, data }) {
       <pre className="max-h-[560px] overflow-auto p-4 text-xs leading-5 text-slate-800">
         {data ? JSON.stringify(data, null, 2) : "{\n  \"waiting\": true\n}"}
       </pre>
+    </section>
+  );
+}
+
+const BULLET_MARKER_RE = /(?:\u00c2\u2022|\u0100\u2022|\u0095|\u2022|Â•|Ā•)/g;
+const BULLET_SPLIT_RE = /\s*(?:\u2022|\u0095)\s+/g;
+
+function normalizeDisplayText(value) {
+  return String(value || "")
+    .replace(BULLET_MARKER_RE, " • ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanInlineText(value) {
+  return normalizeDisplayText(value).replace(BULLET_SPLIT_RE, " ").replace(/\s+/g, " ").trim();
+}
+
+function splitBulletText(value) {
+  const normalized = normalizeDisplayText(value);
+  if (!normalized) return { intro: "", items: [] };
+  if (!normalized.includes("•") && !/\s\?\s+[A-Z0-9]/.test(normalized)) {
+    return { intro: cleanInlineText(normalized), items: [] };
+  }
+  const parts = normalized
+    .replace(/\s\?\s+(?=[A-Z0-9])/g, " • ")
+    .split(BULLET_SPLIT_RE)
+    .map(cleanInlineText)
+    .filter(Boolean);
+  const startsWithBullet = normalized.trim().startsWith("•") || normalized.trim().startsWith("\u0095");
+  return {
+    intro: startsWithBullet ? "" : parts.shift() || "",
+    items: parts
+  };
+}
+
+function TextWithBullets({ text, compact = false }) {
+  const { intro, items } = splitBulletText(text);
+  if (!intro && !items.length) return null;
+  return (
+    <div className={compact ? "text-sm leading-5 text-slate-600" : "text-sm leading-6 text-slate-700"}>
+      {intro && <p>{intro}</p>}
+      {items.length > 0 && (
+        <ul className={`${intro ? "mt-2" : ""} list-disc space-y-1 pl-5`}>
+          {items.map((item, index) => (
+            <li key={`${item}-${index}`}>{item}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function InfoItem({ icon: Icon, label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-md border border-line bg-slate-50 px-3 py-2">
+      <Icon size={16} className="mt-0.5 shrink-0 text-slate-500" />
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-normal text-slate-500">{label}</div>
+        <div className="break-words text-sm text-slate-800">{cleanInlineText(value)}</div>
+      </div>
+    </div>
+  );
+}
+
+function SkillChips({ skills = [] }) {
+  if (!skills.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {skills.slice(0, 42).map((skill) => (
+        <span key={skill.name} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+          {skill.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CleanProfile({ profile }) {
+  if (!profile) {
+    return (
+      <section className="rounded-lg border border-line bg-white p-4">
+        <div className="text-sm text-slate-600">Run a transform to see the extracted profile.</div>
+      </section>
+    );
+  }
+
+  const primaryEmail = profile.emails?.[0];
+  const primaryPhone = profile.phones?.[0];
+  const links = profile.links || {};
+  const visibleSections = Object.entries(profile.resume_sections || {}).filter(
+    ([name]) => !["Education", "Experience", "Skills", "Skills Summary"].includes(name)
+  );
+
+  return (
+    <section className="rounded-lg border border-line bg-white">
+      <div className="border-b border-line px-4 py-3">
+        <div className="text-lg font-semibold">{profile.full_name || "Unknown Candidate"}</div>
+        {profile.headline && <div className="mt-1 text-sm text-slate-600">{profile.headline}</div>}
+      </div>
+
+      <div className="space-y-5 p-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <InfoItem icon={Mail} label="Email" value={primaryEmail} />
+          <InfoItem icon={Phone} label="Phone" value={primaryPhone} />
+          <InfoItem icon={Github} label="GitHub" value={links.github} />
+          <InfoItem icon={LinkIcon} label="LinkedIn" value={links.linkedin} />
+        </div>
+
+        {profile.profile_summary && (
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <Sparkles size={16} />
+              Summary
+            </div>
+            <div className="rounded-md border border-line bg-slate-50 px-3 py-3">
+              <TextWithBullets text={profile.profile_summary} />
+            </div>
+          </div>
+        )}
+
+        {profile.education?.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <GraduationCap size={16} />
+              Education
+            </div>
+            <div className="divide-y divide-line rounded-md border border-line">
+              {profile.education.map((item, index) => (
+                <div key={`${item.institution}-${index}`} className="px-3 py-3">
+                  <div className="font-medium text-slate-900">{cleanInlineText(item.institution)}</div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    {[item.degree, item.field, item.end_year && `Ends ${item.end_year}`, item.cgpa && `CGPA ${item.cgpa}`]
+                      .filter(Boolean)
+                      .map(cleanInlineText)
+                      .join(" - ")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {profile.experience?.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <BriefcaseBusiness size={16} />
+              Experience
+            </div>
+            <div className="divide-y divide-line rounded-md border border-line">
+              {profile.experience.map((item, index) => (
+                <div key={`${item.company}-${item.title}-${index}`} className="px-3 py-3">
+                  <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="font-medium text-slate-900">{cleanInlineText(item.role || item.title)}</div>
+                      <div className="text-sm text-slate-700">{cleanInlineText(item.company)}</div>
+                    </div>
+                    <div className="text-sm text-slate-600 md:text-right">
+                      {item.duration && <div>{cleanInlineText(item.duration)}</div>}
+                      {item.location && (
+                        <div className="mt-1 flex items-center gap-1 md:justify-end">
+                          <MapPin size={14} />
+                          {cleanInlineText(item.location)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {item.summary && <div className="mt-2"><TextWithBullets text={item.summary} compact /></div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {visibleSections.length > 0 && (
+          <div>
+            <div className="mb-2 text-sm font-semibold">Other Sections</div>
+            <div className="grid gap-3 xl:grid-cols-2">
+              {visibleSections.map(([name, body]) => (
+                <div key={name} className="rounded-md border border-line px-3 py-3">
+                  <div className="mb-1 text-sm font-semibold">{name}</div>
+                  <TextWithBullets text={body} compact />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div className="mb-2 text-sm font-semibold">Skills</div>
+          <SkillChips skills={profile.skills || []} />
+        </div>
+      </div>
     </section>
   );
 }
@@ -153,12 +362,14 @@ export default function App() {
           {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         </form>
 
-        <div className="grid gap-5 xl:grid-cols-2">
-          <JsonPanel title="Canonical Profile" data={result?.default_profile} />
-          <JsonPanel title="Custom Output" data={result?.custom_output} />
+        <div className="space-y-5">
+          <CleanProfile profile={result?.default_profile} />
+          <div className="grid gap-5 xl:grid-cols-2">
+            <JsonPanel title="Canonical Profile" data={result?.default_profile} />
+            <JsonPanel title="Custom Output" data={result?.custom_output} />
+          </div>
         </div>
       </div>
     </main>
   );
 }
-

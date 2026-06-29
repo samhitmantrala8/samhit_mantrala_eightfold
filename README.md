@@ -15,6 +15,7 @@ The implementation supports:
 - Recruiter notes TXT
 - Optional GitHub profile URL
 - Optional OpenRouter LLM extraction for messy text
+- Mandatory profile summary generation through OpenRouter when keys are configured, with local fallback only if keys are unavailable
 - Optional Hugging Face embedding matching for semantic skill canonicalization
 
 LLM and embedding helpers are deliberately optional. The transformer still runs end-to-end without network keys.

@@ -13,7 +13,7 @@ NAME_RE = re.compile(r"(?im)^(?:candidate|name)\s*[:\-]\s*([A-Z][A-Za-z .'-]{2,8
 HEADLINE_RE = re.compile(r"(?im)^headline\s*[:\-]\s*(.{4,160})$")
 YEARS_RE = re.compile(r"\b(\d{1,2})(?:\+)?\s+years?\b", re.IGNORECASE)
 BARE_URL_RE = re.compile(
-    r"(?<!://)\b(?:github\.com|linkedin\.com|www\.linkedin\.com|www\.kaggle\.com|kaggle\.com)/[^\s),]+",
+    r"(?<![A-Za-z0-9./:-])(?:github\.com|linkedin\.com|www\.linkedin\.com|www\.kaggle\.com|kaggle\.com)/[^\s),]+",
     re.IGNORECASE,
 )
 DATE_RANGE_RE = re.compile(
@@ -25,12 +25,30 @@ ROLE_RE = re.compile(
     re.IGNORECASE,
 )
 SECTION_HEADERS = {"education", "experience", "projects", "achievements", "skills summary", "skills"}
+ACTION_PREFIX_RE = re.compile(
+    r"^(?:developed|built|used|implemented|reduced|deployed|containerized|visualized|tracked|handled|leveraged|created|stored|fine-tuned|optimised|optimized)\b",
+    re.IGNORECASE,
+)
+BULLET_REPLACEMENTS = (
+    ("\u00c2\u2022", "\u2022"),
+    ("\u0100\u2022", "\u2022"),
+    ("\u0095", "\u2022"),
+)
+BULLET_PREFIX_RE = re.compile(r"^[\s\-*?]*(?:\u2022+\s*)+")
 
 
 def clean_line(line: str) -> str:
-    line = line.replace("\u2022", "•").replace("\t", " ")
+    for bad, good in BULLET_REPLACEMENTS:
+        line = line.replace(bad, good)
+    line = line.replace("Â•", "•").replace("\u2022", "•").replace("\t", " ")
     line = re.sub(r"\s+", " ", line)
     return line.strip()
+
+
+def strip_leading_marker(value: str) -> str:
+    value = clean_line(value)
+    value = BULLET_PREFIX_RE.sub("", value)
+    return value.strip(" -:")
 
 
 def non_empty_lines(text: str) -> list[str]:
@@ -77,7 +95,7 @@ def strip_trailing_location(line: str) -> str:
     tokens = before_country.split()
     if len(tokens) >= 2 and tokens[-1].lower() == tokens[-2].lower():
         return " ".join(tokens[:-1]).strip()
-    return line.strip()
+    return before_country
 
 
 def parse_education(text: str, source: str) -> list[ExtractedFact]:
@@ -89,7 +107,8 @@ def parse_education(text: str, source: str) -> list[ExtractedFact]:
     if not useful:
         return []
 
-    institution_line = useful[0].lstrip("•- ").strip()
+    institution_line = useful[0].lstrip("•-? ").strip()
+    institution_line = strip_leading_marker(institution_line)
     columns = split_columns(institution_line)
     institution = strip_trailing_location(columns[0] if columns else institution_line)
 
@@ -111,13 +130,15 @@ def parse_education(text: str, source: str) -> list[ExtractedFact]:
 
     year_matches = re.findall(r"\b(?:19|20)\d{2}\b", " ".join(lines))
     end_year = int(year_matches[-1]) if year_matches else None
+    cgpa_match = re.search(r"\bCGPA\s*:\s*([0-9]+(?:\.[0-9]+)?(?:\s*/\s*[0-9]+(?:\.[0-9]+)?)?)", " ".join(lines), re.IGNORECASE)
+    cgpa = re.sub(r"\s+", "", cgpa_match.group(1)) if cgpa_match else None
 
     if not institution and not degree:
         return []
     return [
         ExtractedFact(
             "education",
-            {"institution": institution or None, "degree": degree or None, "field": field or None, "end_year": end_year},
+            {"institution": institution or None, "degree": degree or None, "field": field or None, "end_year": end_year, "cgpa": cgpa},
             source,
             "notes-resume-section:education",
             0.76,
@@ -139,7 +160,8 @@ def matching_paren_close(value: str, open_index: int) -> int:
 
 
 def parse_role_header(line: str) -> tuple[str, str, str | None] | None:
-    header = line.lstrip("•-*? ").strip()
+    header = line.lstrip("•-*?Â ").strip()
+    header = strip_leading_marker(header)
     open_index = header.find("(")
     if open_index <= 0:
         return None
@@ -147,11 +169,26 @@ def parse_role_header(line: str) -> tuple[str, str, str | None] | None:
     if close_index < 0:
         return None
     company = header[:open_index].strip(" -:")
+    company = strip_leading_marker(company)
     title = header[open_index + 1 : close_index].strip()
     location = header[close_index + 1 :].strip(" -")
     if not company or not title:
         return None
     return company, title, location or None
+
+
+def is_role_header_line(line: str) -> bool:
+    parsed = parse_role_header(line)
+    if not parsed:
+        return False
+    company, _title, location = parsed
+    if ACTION_PREFIX_RE.search(company):
+        return False
+    if len(company.split()) > 8:
+        return False
+    if location and "," in location:
+        return True
+    return bool(re.search(r"\b(?:intern|engineer|developer|manager|analyst|scientist|consultant)\b", line, re.IGNORECASE))
 
 
 def summary_from_block(block: list[str]) -> str | None:
@@ -160,6 +197,7 @@ def summary_from_block(block: list[str]) -> str | None:
         if DATE_RANGE_RE.search(line) or line.lower().startswith("(team:"):
             continue
         cleaned = line.lstrip("•-*? ").strip()
+        cleaned = strip_leading_marker(cleaned)
         if cleaned:
             summary_lines.append(cleaned)
         if len(summary_lines) >= 2:
@@ -176,7 +214,7 @@ def parse_experience(text: str, source: str) -> list[ExtractedFact]:
 
     blocks: list[list[str]] = []
     for line in lines:
-        if line.startswith("•") and parse_role_header(line):
+        if is_role_header_line(line):
             blocks.append([line])
         elif blocks:
             blocks[-1].append(line)
@@ -185,11 +223,12 @@ def parse_experience(text: str, source: str) -> list[ExtractedFact]:
         parsed = parse_role_header(block[0])
         if not parsed:
             continue
-        company, title, _location = parsed
+        company, title, location = parsed
         block_text = " ".join(block)
         date_match = DATE_RANGE_RE.search(block_text)
         start = normalize_month(date_match.group("start")) if date_match else None
         end = None
+        duration = date_match.group(0).replace("–", "-") if date_match else None
         current_role = False
         if date_match:
             raw_end = date_match.group("end")
@@ -199,7 +238,16 @@ def parse_experience(text: str, source: str) -> list[ExtractedFact]:
         facts.append(
             ExtractedFact(
                 "experience",
-                {"company": company, "title": title, "start": start, "end": end, "summary": summary_from_block(block)},
+                {
+                    "company": company,
+                    "title": title,
+                    "role": title,
+                    "location": location,
+                    "duration": duration,
+                    "start": start,
+                    "end": end,
+                    "summary": summary_from_block(block),
+                },
                 source,
                 "notes-resume-section:experience",
                 0.76,

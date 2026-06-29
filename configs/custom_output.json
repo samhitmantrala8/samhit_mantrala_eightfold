@@ -5,10 +5,10 @@
     { "path": "phone", "from": "phones[0]", "type": "string", "normalize": "E164" },
     { "path": "github", "from": "links.github", "type": "string" },
     { "path": "skills", "from": "skills[].name", "type": "string[]", "normalize": "canonical" },
-    { "path": "current_company", "from": "experience[0].company", "type": "string" }
+    { "path": "current_company", "from": "experience[0].company", "type": "string" },
+    { "path": "profile_summary", "type": "string" }
   ],
   "include_confidence": true,
   "include_provenance": true,
   "on_missing": "null"
 }
-

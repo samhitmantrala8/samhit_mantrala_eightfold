@@ -78,6 +78,8 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         "skills": [],
         "experience": [],
         "education": [],
+        "profile_summary": None,
+        "resume_sections": {},
         "provenance": [],
         "overall_confidence": 0.0,
         "extraction_errors": extraction_errors or [],
@@ -140,7 +142,7 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
     for group in experience_groups.values():
         winner = best_fact(group)
         if winner and isinstance(winner.value, dict):
-            profile["experience"].append(clean_dict(winner.value, ["company", "title", "start", "end", "summary"]))
+            profile["experience"].append(clean_dict(winner.value, ["company", "title", "role", "location", "duration", "start", "end", "summary"]))
 
     education_groups: dict[tuple[str, str], list[ExtractedFact]] = defaultdict(list)
     for fact in by_field["education"]:
@@ -153,7 +155,7 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
     for group in education_groups.values():
         winner = best_fact(group)
         if winner and isinstance(winner.value, dict):
-            profile["education"].append(clean_dict(winner.value, ["institution", "degree", "field", "end_year"]))
+            profile["education"].append(clean_dict(winner.value, ["institution", "degree", "field", "end_year", "cgpa"]))
 
     accepted_fields = {"full_name", "headline", "years_experience", "emails", "phones", "skills", "experience", "education"}
     accepted_fields.update({f"location.{key}" for key in ("city", "region", "country")})
@@ -170,4 +172,3 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         confidence_components.append(sum(skill["confidence"] for skill in profile["skills"]) / len(profile["skills"]))
     profile["overall_confidence"] = round(sum(confidence_components) / len(confidence_components), 3) if confidence_components else 0.0
     return profile
-

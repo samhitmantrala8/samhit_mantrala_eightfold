@@ -64,14 +64,14 @@ def test_resume_shaped_text_extracts_sections_without_llm(tmp_path):
 Aarav Mehta Email: aarav@example.com LinkedIn : Aarav Mehta Mobile: +91-9876543210
 GitHub : github.com/aaravmehta
 Education
-• Indian Institute of Information Technology Jabalpur Jabalpur, India
+Â• Indian Institute of Information Technology Jabalpur Jabalpur, India
 Bachelor of Technology - Computer Science and Engineering; CGPA: 8.5/10 November 2022 - May 2026
 Courses: Data Structures and Algorithms, Artificial Intelligence, Database Management Systems
 Experience
-• MindTickle (SDE (Applied AI) Intern) Pune, Maharashtra, India
+Â• MindTickle (SDE (Applied AI) Intern) Pune, Maharashtra, India
 (Team: Centre of Excellence for Machine Learning) January 2026 - Present
 ? Developed asynchronous RPC services using gRPC, Kafka, Redis, protobuf, Golang, LangGraph ReAct Agent, RAG, AWS OpenSearch, Cohere-Rerank-3.5, Docker, Kubernetes and Helm Charts.
-• CREW (Machine Learning Intern) Sydney, Australia (Remote)
+Â• CREW (Machine Learning Intern) Sydney, Australia (Remote)
 (Team: Machine Learning) June 2025 - October 2025
 ? Deployed a Flask app on Google Cloud Run using FFMPeg and Google Cloud APIs.
 Projects
@@ -95,9 +95,37 @@ Skills Summary
     assert profile["education"][0]["institution"] == "Indian Institute of Information Technology Jabalpur"
     assert profile["education"][0]["field"] == "Computer Science and Engineering"
     assert profile["education"][0]["end_year"] == 2026
+    assert profile["education"][0]["cgpa"] == "8.5/10"
     assert profile["experience"][0]["company"] == "MindTickle"
     assert profile["experience"][0]["title"] == "SDE (Applied AI) Intern"
+    assert profile["experience"][0]["role"] == "SDE (Applied AI) Intern"
+    assert profile["experience"][0]["location"] == "Pune, Maharashtra, India"
+    assert profile["experience"][0]["duration"] == "January 2026 - Present"
     assert profile["experience"][0]["start"] == "2026-01"
     assert profile["experience"][0]["end"] is None
     assert profile["headline"] == "SDE (Applied AI) Intern at MindTickle"
     assert {"Go", "Kafka", "Redis", "gRPC", "Kubernetes", "LangGraph", "ReAct Agents", "C++"} <= skill_names
+
+
+def test_windows_bullet_marker_does_not_leak_into_summary_or_fields(tmp_path):
+    resume = tmp_path / "windows_bullet_resume.txt"
+    resume.write_text(
+        """
+Test Candidate Email: test@example.com Mobile: +91-9876543210
+Education
+\x95 Test Institute Test City, India
+Bachelor of Technology - Computer Science; CGPA: 9.1/10 May 2026
+Experience
+\x95 ExampleCo (Software Engineering Intern) Pune, Maharashtra, India
+January 2026 - Present
+\x95 Built APIs with Flask and Python.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    profile = transform_paths([resume], default_region="IN")["default_profile"]
+
+    assert profile["education"][0]["institution"] == "Test Institute Test City"
+    assert profile["experience"][0]["company"] == "ExampleCo"
+    assert "\x95" not in profile["profile_summary"]
+    assert "•" not in profile["profile_summary"]
