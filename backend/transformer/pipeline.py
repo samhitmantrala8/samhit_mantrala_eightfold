@@ -314,7 +314,6 @@ def transform_paths(
         }
     )
     extraction_errors.extend(summary_errors)
-    default_profile["extraction_errors"] = extraction_errors
 
     if use_agentic_llmops:
         logger.info("agentic llmops start")
@@ -351,7 +350,7 @@ def transform_paths(
             logger.exception("agentic llmops trace store failed")
         default_profile.pop("llmops", None)
 
-    default_profile["extraction_errors"] = extraction_errors
+    default_profile.pop("extraction_errors", None)
     move_candidate_id_to_bottom(default_profile)
     logger.info("validation start")
     validation_errors = validate_default_profile(default_profile)

@@ -91,7 +91,6 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         "resume_sections": {},
         "provenance": [],
         "overall_confidence": 0.0,
-        "extraction_errors": extraction_errors or [],
     }
 
     for field in ("full_name", "headline", "years_experience"):

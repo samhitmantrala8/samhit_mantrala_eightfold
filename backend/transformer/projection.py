@@ -103,6 +103,8 @@ def project_profile(profile: dict[str, Any], config: dict[str, Any] | None, defa
     for field in config.get("fields", []):
         target_path = field["path"]
         source_path = field.get("from", target_path)
+        if target_path == "extraction_errors" or source_path == "extraction_errors":
+            continue
         expected_type = field.get("type")
         value = read_path(profile, source_path)
         value = normalize_projected(value, field.get("normalize"), default_region)

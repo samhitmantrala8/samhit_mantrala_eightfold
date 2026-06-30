@@ -62,7 +62,6 @@ const CUSTOM_FIELD_OPTIONS = [
   { group: "Diagnostics", label: "Provenance", path: "provenance", type: "object[]" },
   { group: "Diagnostics", label: "Resume Sections", path: "resume_sections", type: "object" },
   { group: "Diagnostics", label: "Semantic Mappings", path: "semantic_mappings", type: "object[]" },
-  { group: "Diagnostics", label: "Extraction Errors", path: "extraction_errors", type: "string[]" },
   { group: "Metadata", label: "Candidate ID", path: "candidate_id", type: "string" }
 ];
 const DEFAULT_SELECTED_FIELDS = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, true]));
