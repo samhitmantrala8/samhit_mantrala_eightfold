@@ -5,17 +5,22 @@ React + Tailwind frontend, Flask backend, and a deterministic Python transformer
 The core pipeline is:
 
 ```text
-load sources -> extract facts -> normalize -> merge/confidence -> canonical profile -> project custom output -> validate
+load sources -> extract facts -> normalize -> merge/confidence -> optional agent evaluation -> canonical profile -> project custom output -> validate
 ```
 
 The implementation supports:
 
 - Recruiter CSV export
 - ATS JSON blob
-- Recruiter notes TXT
+- Recruiter notes TXT/MD
+- PDF resume text extraction
 - GitHub profile, public repository, project, and language enrichment through the public GitHub API, either from the URL field or from a GitHub URL found in uploaded text
 - LinkedIn profile URL normalization/storage when a real `linkedin.com/...` URL is supplied
+- Codeforces profile enrichment through the official Codeforces API when a handle/profile URL is found
 - Structured resume projects with title, date, tech stack, links, and evidence bullets
+- Deterministic multilingual-ish section normalization with aliases/fuzzy rules
+- Optional Gemini section mapping for ambiguous headings, with confidence shown in the UI
+- Optional bounded agent evaluator loop with task decomposition, evaluator scoring, safe refinement, and SQLite memory examples
 - Optional OpenRouter LLM extraction for messy text
 - Mandatory profile summary generation through OpenRouter when a key is configured, with local fallback only if a key is unavailable
 - Optional Hugging Face embedding matching for semantic skill canonicalization
@@ -61,12 +66,14 @@ Main endpoint:
 ```text
 POST /api/transform
 multipart form fields:
-- files: one or more CSV, JSON, TXT, or MD files
+- files: one or more CSV, JSON, TXT, MD, or PDF files, max 5 files and 10 MB each
 - config: optional runtime projection JSON
 - github_url: optional GitHub profile URL
 - linkedin_url: optional LinkedIn profile URL
 - default_region: phone parsing region, default US
 - use_llm: true or false
+- use_gemini_hybrid: true or false
+- use_agentic_llmops: true or false
 ```
 
 ## Frontend
@@ -102,12 +109,31 @@ The tests cover default schema output, custom projection, phone normalization, s
 Do not commit a real key. Add it to `.env`:
 
 ```env
-OPENROUTER_API_KEY=your_openrouter_key
+OPENROUTER_KEYS=key_one,key_two,key_three
 USE_LLM_EXTRACTOR=true
-OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
+OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 ```
 
 The LLM extractor asks for strict JSON with evidence spans and uses temperature `0`. LLM output is validated, normalized, and merged by the deterministic engine before it can affect the final profile.
+
+Optional Gemini hybrid and agent evaluator:
+
+```env
+gem1=your_gemini_key_1
+gem2=your_gemini_key_2
+gem3=your_gemini_key_3
+gem4=your_gemini_key_4
+gem5=your_gemini_key_5
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_AGENT_MODEL=gemini-2.5-flash
+USE_GEMINI_HYBRID=true
+USE_AGENTIC_LLMOPS=true
+AGENT_SCORE_THRESHOLD=8.5
+AGENT_MAX_LOOPS=3
+LOG_LEVEL=INFO
+```
+
+The agent evaluator runs after deterministic extraction and merge. It loads compact good/bad examples from SQLite, decomposes the quality check into smaller tasks, scores the candidate profile, and only applies safe refinements such as a better supported summary or evidence-backed skills.
 
 Optional semantic skill matching:
 
@@ -119,8 +145,11 @@ HF_EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
 
 Embeddings are only used for controlled skill canonicalization when exact alias and fuzzy matching do not resolve a mention.
 
+SQLite runtime data is stored locally under `.runtime/` and is ignored by git.
+
 ## Assumptions and Descoped Items
 
 - The current engine merges one candidate bundle at a time. For thousands of candidates, the same fact model can be grouped by email, phone, or candidate source ID before merging.
-- PDF/DOCX resume parsing and scanned-document OCR are descoped from the first implementation because TXT notes already satisfy the unstructured-source requirement.
-- Full ReACT agents, vector RAG, rerankers, and VLMs are intentionally not core dependencies. They add nondeterminism and operational risk for a task that is mainly explainable ETL.
+- Scanned-document OCR and VLM extraction are not included yet.
+- LinkedIn is handled conservatively as a supplied URL because reliable LinkedIn scraping usually requires authenticated access.
+- Vector memory retrieval can be added later; the current memory system uses compact recent good/bad examples in SQLite.

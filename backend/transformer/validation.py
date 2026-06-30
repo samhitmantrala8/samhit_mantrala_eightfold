@@ -36,10 +36,14 @@ def validate_default_profile(profile: dict[str, Any]) -> list[str]:
         errors.append("provenance must be a list")
     if not isinstance(profile.get("projects", []), list):
         errors.append("projects must be a list")
+    if not isinstance(profile.get("achievements", []), list):
+        errors.append("achievements must be a list")
     if not isinstance(profile.get("overall_confidence"), (int, float)):
         errors.append("overall_confidence must be numeric")
     if profile.get("profile_summary") is not None and not isinstance(profile["profile_summary"], str):
         errors.append("profile_summary must be string or null")
     if not isinstance(profile.get("resume_sections", {}), dict):
         errors.append("resume_sections must be an object")
+    if not isinstance(profile.get("semantic_mappings", []), list):
+        errors.append("semantic_mappings must be a list")
     return errors

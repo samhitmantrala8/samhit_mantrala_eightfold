@@ -8,6 +8,8 @@ from typing import Any
 import requests
 
 from backend.transformer.extractors.llm_extractor import configured_keys
+from backend.transformer.extractors.notes_extractor import grouped_section_lines
+from backend.transformer.section_classifier import CANONICAL_SECTION_LABELS
 
 
 SUMMARY_SYSTEM_PROMPT = """You write concise candidate profile summaries for a data transformation system.
@@ -31,30 +33,17 @@ def clean_inline_text(text: str | None) -> str:
 
 
 def extract_resume_sections(texts: list[str]) -> dict[str, str]:
-    section_names = [
-        "Education",
-        "Experience",
-        "Projects",
-        "Achievements",
-        "Skills Summary",
-        "Skills",
-        "Extra Curriculars",
-        "Extracurriculars",
-        "Certifications",
-    ]
     sections: dict[str, str] = {}
-    joined = "\n".join(texts)
-    pattern = re.compile(
-        rf"(?im)^({'|'.join(re.escape(name) for name in section_names)})\s*$"
-    )
-    matches = list(pattern.finditer(joined))
-    for index, match in enumerate(matches):
-        start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(joined)
-        body = normalize_bullet_markers(joined[start:end].strip())
-        if body:
-            body = re.sub(r"\s+", " ", body)
-            sections[match.group(1)] = body[:1800]
+    for text in texts:
+        grouped = grouped_section_lines(text)
+        for canonical, lines in grouped.items():
+            body = normalize_bullet_markers(" ".join(lines).strip())
+            if not body:
+                continue
+            label = CANONICAL_SECTION_LABELS.get(canonical, canonical.replace("_", " ").title())
+            previous = sections.get(label)
+            merged = f"{previous} {body}" if previous else body
+            sections[label] = re.sub(r"\s+", " ", merged)[:1800]
     return sections
 
 
@@ -68,6 +57,7 @@ def summary_context(profile: dict[str, Any], source_texts: list[str]) -> dict[st
         "education": profile.get("education"),
         "experience": profile.get("experience"),
         "projects": profile.get("projects"),
+        "achievements": profile.get("achievements"),
         "skills": [skill.get("name") for skill in profile.get("skills", [])],
         "sections": extract_resume_sections(source_texts),
     }
@@ -78,6 +68,7 @@ def deterministic_summary(profile: dict[str, Any], source_texts: list[str]) -> s
     education = profile.get("education") or []
     experience = profile.get("experience") or []
     projects = profile.get("projects") or []
+    achievements = profile.get("achievements") or []
     skills = [skill.get("name") for skill in profile.get("skills", [])[:14]]
     sections = extract_resume_sections(source_texts)
 
@@ -110,14 +101,19 @@ def deterministic_summary(profile: dict[str, Any], source_texts: list[str]) -> s
             project_text = " Projects include " + ", ".join(project_titles) + "."
     elif any(key in sections for key in ("Projects", "Achievements")):
         project_text = " Projects and achievements are present in the source resume."
+    achievement_text = ""
+    if achievements:
+        titles = [clean_inline_text(item.get("title")) for item in achievements[:3] if item.get("title")]
+        if titles:
+            achievement_text = " Achievements include " + ", ".join(titles) + "."
     skill_text = f" Key skills include {', '.join(skills)}." if skills else ""
-    summary = f"{name} is a candidate{education_text}.{experience_text}{project_text}{skill_text}"
+    summary = f"{name} is a candidate{education_text}.{experience_text}{project_text}{achievement_text}{skill_text}"
     return re.sub(r"\s+", " ", summary).strip()
 
 
 def generate_profile_summary(profile: dict[str, Any], source_texts: list[str]) -> tuple[str, dict[str, Any], list[str]]:
     keys = configured_keys()
-    model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+    model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
     context = summary_context(profile, source_texts)
     prompt = {
         "instruction": (

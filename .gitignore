@@ -9,5 +9,6 @@ dist/
 logs/
 .DS_Store
 outputs/*.tmp
+outputs/*test_result*.json
 design/*.png
 .runtime/

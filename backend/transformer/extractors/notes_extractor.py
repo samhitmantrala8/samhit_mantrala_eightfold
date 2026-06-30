@@ -7,13 +7,14 @@ from backend.transformer.facts import ExtractedFact, ExtractionBundle
 from backend.transformer.normalizers.contact import EMAIL_RE, PHONE_RE, URL_RE, classify_link, normalize_url
 from backend.transformer.normalizers.dates import normalize_month
 from backend.transformer.normalizers.skills import extract_skills_from_text
+from backend.transformer.section_classifier import classify_line, best_section_match
 
 
 NAME_RE = re.compile(r"(?im)^(?:candidate|name)\s*[:\-]\s*([A-Z][A-Za-z .'-]{2,80})$")
 HEADLINE_RE = re.compile(r"(?im)^headline\s*[:\-]\s*(.{4,160})$")
 YEARS_RE = re.compile(r"\b(\d{1,2})(?:\+)?\s+years?\b", re.IGNORECASE)
 BARE_URL_RE = re.compile(
-    r"(?<![A-Za-z0-9./:-])(?:github\.com|linkedin\.com|www\.linkedin\.com|www\.kaggle\.com|kaggle\.com)/[^\s),]+",
+    r"(?<![A-Za-z0-9./:-])(?:github\.com|linkedin\.com|www\.linkedin\.com|www\.kaggle\.com|kaggle\.com|codeforces\.com|www\.codeforces\.com|leetcode\.com|www\.leetcode\.com)/[^\s),]+",
     re.IGNORECASE,
 )
 DATE_RANGE_RE = re.compile(
@@ -67,20 +68,30 @@ def header_name(text: str) -> str | None:
 
 
 def section_lines(text: str, start_header: str, end_headers: set[str]) -> list[str]:
+    target = canonical_section_for_header(start_header)
+    grouped = grouped_section_lines(text)
+    return grouped.get(target, []) if target else []
+
+
+def canonical_section_for_header(header: str) -> str | None:
+    section, score, _alias = best_section_match(header)
+    return section if section and score >= 0.68 else None
+
+
+def grouped_section_lines(text: str) -> dict[str, list[str]]:
     lines = non_empty_lines(text)
-    start_index = None
+    grouped: dict[str, list[str]] = {}
+    current_section: str | None = None
     for index, line in enumerate(lines):
-        if line.lower() == start_header.lower():
-            start_index = index + 1
-            break
-    if start_index is None:
-        return []
-    end_index = len(lines)
-    for index in range(start_index, len(lines)):
-        if lines[index].lower() in end_headers:
-            end_index = index
-            break
-    return lines[start_index:end_index]
+        next_lines = lines[index + 1 : index + 4]
+        classification = classify_line(line, next_lines)
+        if classification.kind == "section" and classification.canonical_section:
+            current_section = classification.canonical_section
+            grouped.setdefault(current_section, [])
+            continue
+        if current_section:
+            grouped.setdefault(current_section, []).append(line)
+    return grouped
 
 
 def split_columns(line: str) -> list[str]:
@@ -109,6 +120,11 @@ def parse_education(text: str, source: str) -> list[ExtractedFact]:
 
     institution_line = useful[0].lstrip("•-? ").strip()
     institution_line = strip_leading_marker(institution_line)
+    inline_degree_line = ""
+    inline_degree_match = re.search(r"\b(Bachelor|Master|B\.?Tech|M\.?Tech|Degree)\b", institution_line, re.IGNORECASE)
+    if inline_degree_match and inline_degree_match.start() > 0:
+        inline_degree_line = institution_line[inline_degree_match.start() :].strip(" ,;-")
+        institution_line = institution_line[: inline_degree_match.start()].strip(" ,;-")
     columns = split_columns(institution_line)
     institution = strip_trailing_location(columns[0] if columns else institution_line)
 
@@ -118,7 +134,7 @@ def parse_education(text: str, source: str) -> list[ExtractedFact]:
             for line in useful[1:]
             if re.search(r"\b(Bachelor|Master|B\.?Tech|M\.?Tech|Degree|Computer Science)\b", line, re.IGNORECASE)
         ),
-        "",
+        inline_degree_line,
     )
     degree_text = re.sub(r";.*$", "", degree_line).strip()
     degree = degree_text
@@ -365,17 +381,33 @@ def parse_projects(text: str, source: str) -> list[ExtractedFact]:
     return facts
 
 
-def extract_notes(path: Path, use_llm: bool = False) -> ExtractionBundle:
+def parse_achievements(text: str, source: str) -> list[ExtractedFact]:
+    lines = section_lines(text, "Achievements", {"projects", "skills summary", "skills", "experience", "education"})
+    facts: list[ExtractedFact] = []
+    for line in lines:
+        cleaned = strip_leading_marker(line)
+        if not cleaned:
+            continue
+        title = cleaned
+        summary = cleaned
+        if ":" in cleaned:
+            title, summary = [part.strip() for part in cleaned.split(":", 1)]
+        facts.append(
+            ExtractedFact(
+                "achievements",
+                {"title": title[:120], "summary": summary[:360], "links": links_from_block([cleaned])},
+                source,
+                "notes-resume-section:achievements",
+                0.72,
+                cleaned[:180],
+            )
+        )
+    return facts[:12]
+
+
+def extract_notes_from_text(text: str, source: str, use_llm: bool = False) -> ExtractionBundle:
     facts: list[ExtractedFact] = []
     errors: list[str] = []
-    try:
-        text = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        text = path.read_text(encoding="latin-1", errors="ignore")
-    except Exception as exc:
-        return ExtractionBundle([], [f"{path.name}: failed to read text: {exc}"])
-
-    source = f"notes:{path.name}"
 
     parsed_name = header_name(text)
     if parsed_name:
@@ -422,6 +454,7 @@ def extract_notes(path: Path, use_llm: bool = False) -> ExtractionBundle:
     facts.extend(parse_education(text, source))
     facts.extend(parse_experience(text, source))
     facts.extend(parse_projects(text, source))
+    facts.extend(parse_achievements(text, source))
 
     if use_llm:
         from backend.transformer.extractors.llm_extractor import extract_text_with_llm
@@ -431,3 +464,15 @@ def extract_notes(path: Path, use_llm: bool = False) -> ExtractionBundle:
         errors.extend(llm_bundle.errors)
 
     return ExtractionBundle(facts, errors)
+
+
+def extract_notes(path: Path, use_llm: bool = False) -> ExtractionBundle:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        text = path.read_text(encoding="latin-1", errors="ignore")
+    except Exception as exc:
+        return ExtractionBundle([], [f"{path.name}: failed to read text: {exc}"])
+
+    source = f"notes:{path.name}"
+    return extract_notes_from_text(text, source, use_llm=use_llm)

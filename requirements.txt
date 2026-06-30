@@ -5,4 +5,5 @@ phonenumbers==8.13.42
 python-dateutil==2.9.0.post0
 rapidfuzz==3.9.6
 requests==2.32.3
+pypdf==5.1.0
 pytest==8.3.2

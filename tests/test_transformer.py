@@ -208,3 +208,57 @@ GitHub: github.com/example-user
     assert profile["full_name"] == "Test Candidate"
     assert profile["headline"] == "Open source developer"
     assert any(item["source"] == "github:example-user" for item in profile["provenance"])
+
+
+def test_alternate_section_headings_parse_deterministically(tmp_path):
+    resume = tmp_path / "alternate_sections.txt"
+    resume.write_text(
+        """
+Test Candidate Email: test@example.com
+Academics / Scholastic Record
+IIIT Jabalpur Jabalpur, India
+Bachelor of Technology - Computer Science and Engineering; CGPA: 8.5/10 November 2022 - May 2026
+Professional Background
+MindTickle (SDE Applied AI Intern) Pune, India
+January 2026 - Present
+Built services using Go, Kafka, Redis and LangGraph.
+Projects / Applied Builds
+CodeForces Future Rating Predictor June 2025
+Tech Stack: ReactJS, TailwindCSS, Flask, MongoDB.
+Achievements and Recognition
+Amazon ML Challenge 2024: Secured 391st place.
+Technical Strengths
+Python, ReactJS, MongoDB, Docker, Kubernetes.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    profile = transform_paths([resume], default_region="IN")["default_profile"]
+    skill_names = {skill["name"] for skill in profile["skills"]}
+
+    assert profile["education"][0]["institution"] == "IIIT Jabalpur"
+    assert profile["education"][0]["cgpa"] == "8.5/10"
+    assert profile["experience"][0]["company"] == "MindTickle"
+    assert profile["projects"][0]["title"] == "CodeForces Future Rating Predictor"
+    assert profile["achievements"][0]["title"] == "Amazon ML Challenge 2024"
+    assert {"Python", "React", "MongoDB", "Docker", "Kubernetes"} <= skill_names
+
+
+def test_fuzzy_csv_headers_extract_expected_fields(tmp_path):
+    csv_file = tmp_path / "fuzzy.csv"
+    csv_file.write_text(
+        "Candidate Full Name,email_id,Mobile Number,Current Employer,Current Role,GitHub Profile,Technical Skills,CF Handle\n"
+        "Test Candidate,test@example.com,+91-9876543210,ExampleCo,ML Intern,github.com/example,Python; ReactJS; Mongo DB,CinCout21\n",
+        encoding="utf-8",
+    )
+
+    profile = transform_paths([csv_file], default_region="IN")["default_profile"]
+    skill_names = {skill["name"] for skill in profile["skills"]}
+
+    assert profile["full_name"] == "Test Candidate"
+    assert profile["emails"] == ["test@example.com"]
+    assert profile["phones"] == ["+919876543210"]
+    assert profile["experience"][0]["company"] == "ExampleCo"
+    assert profile["links"]["github"] == "https://github.com/example"
+    assert "https://codeforces.com/profile/CinCout21" in profile["links"]["other"]
+    assert {"Python", "React", "MongoDB"} <= skill_names

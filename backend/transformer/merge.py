@@ -79,6 +79,7 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         "experience": [],
         "education": [],
         "projects": [],
+        "achievements": [],
         "profile_summary": None,
         "resume_sections": {},
         "provenance": [],
@@ -170,7 +171,19 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         if winner and isinstance(winner.value, dict):
             profile["projects"].append(clean_dict(winner.value, ["title", "date", "tech_stack", "links", "bullets"]))
 
-    accepted_fields = {"full_name", "headline", "years_experience", "emails", "phones", "skills", "experience", "education", "projects"}
+    achievement_groups: dict[str, list[ExtractedFact]] = defaultdict(list)
+    for fact in by_field["achievements"]:
+        if not isinstance(fact.value, dict):
+            continue
+        title = (fact.value.get("title") or fact.value.get("summary") or "").strip()
+        if title:
+            achievement_groups[title.lower()].append(fact)
+    for group in achievement_groups.values():
+        winner = best_fact(group)
+        if winner and isinstance(winner.value, dict):
+            profile["achievements"].append(clean_dict(winner.value, ["title", "summary", "links"]))
+
+    accepted_fields = {"full_name", "headline", "years_experience", "emails", "phones", "skills", "experience", "education", "projects", "achievements"}
     accepted_fields.update({f"location.{key}" for key in ("city", "region", "country")})
     accepted_fields.update({"links.github", "links.linkedin", "links.portfolio", "links.other"})
     profile["provenance"] = [provenance_entry(fact) for fact in facts if fact.field in accepted_fields]

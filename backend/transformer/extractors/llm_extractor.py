@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 import requests
@@ -16,8 +17,20 @@ Each extracted value must include a short evidence string copied from the text."
 
 
 def configured_keys() -> list[str]:
-    key = os.getenv("OPENROUTER_API_KEY") or ""
-    return [key.strip()] if key.strip() else []
+    raw_values = [
+        os.getenv("OPENROUTER_API_KEY") or "",
+        os.getenv("OPENROUTER_KEYS") or "",
+        *(os.getenv(f"OPENROUTER_KEY_{index}") or "" for index in range(1, 6)),
+    ]
+    keys: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        for key in re.split(r"[\s,]+", raw):
+            cleaned = key.strip()
+            if cleaned and cleaned not in seen:
+                keys.append(cleaned)
+                seen.add(cleaned)
+    return keys
 
 
 def extract_text_with_llm(text: str, source: str) -> ExtractionBundle:
@@ -28,7 +41,7 @@ def extract_text_with_llm(text: str, source: str) -> ExtractionBundle:
     if not keys:
         return ExtractionBundle([], ["llm: enabled but no OpenRouter key configured"])
 
-    model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
+    model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
     user_prompt = {
         "task": "Extract candidate facts from this text.",
         "schema": {

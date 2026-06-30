@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import {
+  BrainCircuit,
   BriefcaseBusiness,
   CheckCircle2,
+  Database,
   ExternalLink,
   FileJson,
   FolderKanban,
+  Gauge,
   Github,
   GraduationCap,
   Link as LinkIcon,
@@ -14,7 +17,9 @@ import {
   MapPin,
   Phone,
   Play,
+  Repeat2,
   Sparkles,
+  Trophy,
   UploadCloud,
   XCircle
 } from "lucide-react";
@@ -31,6 +36,10 @@ const SAMPLE_CONFIG = `{
   "include_provenance": false,
   "on_missing": "null"
 }`;
+
+const MAX_FILES = 5;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_EXTENSIONS = [".csv", ".json", ".txt", ".md", ".pdf"];
 
 function JsonPanel({ title, data }) {
   return (
@@ -166,6 +175,141 @@ function MergeTrust({ profile }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SemanticMappings({ profile }) {
+  const rows = (profile?.semantic_mappings || []).filter((row) => row.method?.startsWith("gemini"));
+  if (!rows.length) return null;
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <BrainCircuit size={16} />
+        Gemini Semantic Decisions
+      </div>
+      <div className="overflow-hidden rounded-md border border-line">
+        <div className="grid grid-cols-[1.2fr_0.8fr_1fr_70px_70px] border-b border-line bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+          <div>Input</div>
+          <div>Kind</div>
+          <div>Mapped To</div>
+          <div className="text-right">Conf.</div>
+          <div className="text-right">Used</div>
+        </div>
+        <div className="max-h-72 overflow-auto divide-y divide-line">
+          {rows.slice(0, 30).map((row, index) => (
+            <div key={`${row.original}-${index}`} className="grid grid-cols-[1.2fr_0.8fr_1fr_70px_70px] gap-2 px-3 py-2 text-xs text-slate-700">
+              <div className="break-words font-medium text-slate-900">{cleanInlineText(row.original)}</div>
+              <div>{cleanInlineText(row.kind)}</div>
+              <div className="break-words">{cleanInlineText(row.mapped_to || row.canonical_section || "-")}</div>
+              <div className="text-right font-semibold">{Number(row.confidence || 0).toFixed(2)}</div>
+              <div className="text-right">{row.applied ? "yes" : "no"}</div>
+              {row.reason && <div className="col-span-5 text-slate-500">{cleanInlineText(row.reason)}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function scoreClass(score) {
+  if (score >= 8) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (score >= 6) return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-red-200 bg-red-50 text-red-700";
+}
+
+function AgentOps({ profile }) {
+  const llmops = profile?.llmops;
+  if (!llmops) return null;
+  const iterations = llmops.iterations || [];
+  const events = llmops.request_events || [];
+  const finalScore = Number(llmops.final_score || 0);
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <Gauge size={16} />
+        Agent Evaluation
+      </div>
+      <div className="space-y-3 rounded-md border border-line bg-slate-50 p-3">
+        <div className="grid gap-2 md:grid-cols-4">
+          <div className={`rounded-md border px-3 py-2 ${scoreClass(finalScore)}`}>
+            <div className="text-[11px] font-semibold uppercase tracking-normal">Score</div>
+            <div className="text-lg font-semibold">{finalScore.toFixed(2)}/10</div>
+          </div>
+          <div className="rounded-md border border-line bg-white px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-normal text-slate-500">Mode</div>
+            <div className="truncate text-sm font-medium text-slate-800">{cleanInlineText(llmops.mode)}</div>
+          </div>
+          <div className="rounded-md border border-line bg-white px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-normal text-slate-500">Stop</div>
+            <div className="truncate text-sm font-medium text-slate-800">{cleanInlineText(llmops.stopping_reason)}</div>
+          </div>
+          <div className="rounded-md border border-line bg-white px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-normal text-slate-500">Memory</div>
+            <div className="text-sm font-medium text-slate-800">{llmops.memory_examples_used || 0} examples</div>
+          </div>
+        </div>
+
+        {llmops.tasks?.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+              <Repeat2 size={13} />
+              Decomposed Tasks
+            </div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {llmops.tasks.slice(0, 6).map((task, index) => (
+                <div key={`${task.name}-${index}`} className="rounded-md border border-line bg-white px-3 py-2 text-xs">
+                  <div className="font-semibold text-slate-800">{cleanInlineText(task.name)}</div>
+                  <div className="mt-1 text-slate-600">{cleanInlineText(task.purpose)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {iterations.length > 0 && (
+          <div className="overflow-hidden rounded-md border border-line bg-white">
+            <div className="grid grid-cols-[60px_90px_1fr] border-b border-line bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+              <div>Loop</div>
+              <div>Score</div>
+              <div>Evaluator Notes</div>
+            </div>
+            <div className="divide-y divide-line">
+              {iterations.map((item) => (
+                <div key={item.loop} className="grid grid-cols-[60px_90px_1fr] gap-2 px-3 py-2 text-xs text-slate-700">
+                  <div className="font-semibold">{item.loop}</div>
+                  <div className="font-semibold">{Number(item.score || 0).toFixed(2)}</div>
+                  <div>
+                    <div>{cleanInlineText(item.evaluation?.verdict || "No verdict")}</div>
+                    {item.applied_changes?.length > 0 && (
+                      <div className="mt-1 text-slate-500">
+                        Applied: {item.applied_changes.map((change) => cleanInlineText(change.value || change.field)).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {events.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+              <Database size={13} />
+              Gemini Calls
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {events.slice(0, 16).map((event, index) => (
+                <span key={`${event.task}-${index}`} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700">
+                  {cleanInlineText(event.task)} | key {event.key_index ?? "-"} | {event.status || "error"} | {event.seconds ?? "-"}s
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -315,6 +459,39 @@ function CleanProfile({ profile }) {
           </div>
         )}
 
+        {profile.achievements?.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              <Trophy size={16} />
+              Achievements
+            </div>
+            <div className="divide-y divide-line rounded-md border border-line">
+              {profile.achievements.map((achievement, index) => (
+                <div key={`${achievement.title}-${index}`} className="space-y-2 px-3 py-3">
+                  <div className="font-medium text-slate-900">{cleanInlineText(achievement.title)}</div>
+                  {achievement.summary && <TextWithBullets text={achievement.summary} compact />}
+                  {achievement.links?.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {achievement.links.map((link) => (
+                        <a
+                          key={link}
+                          href={link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-ink"
+                        >
+                          <ExternalLink size={13} />
+                          {cleanInlineText(link)}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {visibleSections.length > 0 && (
           <div>
             <div className="mb-2 text-sm font-semibold">Other Sections</div>
@@ -335,6 +512,8 @@ function CleanProfile({ profile }) {
         </div>
 
         <MergeTrust profile={profile} />
+        <SemanticMappings profile={profile} />
+        <AgentOps profile={profile} />
       </div>
     </section>
   );
@@ -347,14 +526,44 @@ export default function App() {
   const [defaultRegion, setDefaultRegion] = useState("US");
   const [config, setConfig] = useState(SAMPLE_CONFIG);
   const [useLlm, setUseLlm] = useState(false);
+  const [useGeminiHybrid, setUseGeminiHybrid] = useState(false);
+  const [useAgenticLlmpops, setUseAgenticLlmpops] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
   const fileNames = useMemo(() => files.map((file) => file.name).join(", "), [files]);
 
+  function updateFiles(fileList) {
+    const selected = Array.from(fileList || []);
+    if (selected.length > MAX_FILES) {
+      setError(`Upload at most ${MAX_FILES} files.`);
+      setFiles(selected.slice(0, MAX_FILES));
+      return;
+    }
+    const invalid = selected.find((file) => {
+      const lower = file.name.toLowerCase();
+      return !ACCEPTED_EXTENSIONS.some((extension) => lower.endsWith(extension));
+    });
+    if (invalid) {
+      setError(`${invalid.name} is not supported. Use CSV, JSON, TXT, MD, or PDF.`);
+      return;
+    }
+    const oversized = selected.find((file) => file.size > MAX_FILE_BYTES);
+    if (oversized) {
+      setError(`${oversized.name} exceeds the 10 MB file limit.`);
+      return;
+    }
+    setError("");
+    setFiles(selected);
+  }
+
   async function submit(event) {
     event.preventDefault();
+    if (files.length > MAX_FILES) {
+      setError(`Upload at most ${MAX_FILES} files.`);
+      return;
+    }
     setLoading(true);
     setError("");
     setResult(null);
@@ -365,6 +574,8 @@ export default function App() {
     payload.append("linkedin_url", linkedinUrl);
     payload.append("default_region", defaultRegion);
     payload.append("use_llm", String(useLlm));
+    payload.append("use_gemini_hybrid", String(useGeminiHybrid));
+    payload.append("use_agentic_llmops", String(useAgenticLlmpops));
     payload.append("config", config);
 
     try {
@@ -403,13 +614,14 @@ export default function App() {
             <span className="mb-2 block text-sm font-medium">Sources</span>
             <div className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center">
               <UploadCloud size={26} className="text-slate-500" />
-              <span className="mt-2 max-w-full text-sm text-slate-700">{fileNames || "CSV, JSON, or TXT"}</span>
+              <span className="mt-2 max-w-full text-sm text-slate-700">{fileNames || "CSV, JSON, TXT, MD, or PDF"}</span>
+              <span className="mt-1 text-xs text-slate-500">Max {MAX_FILES} files, 10 MB each</span>
               <input
                 className="sr-only"
                 type="file"
                 multiple
-                accept=".csv,.json,.txt,.md"
-                onChange={(event) => setFiles(Array.from(event.target.files || []))}
+                accept=".csv,.json,.txt,.md,.pdf"
+                onChange={(event) => updateFiles(event.target.files)}
               />
             </div>
           </label>
@@ -452,6 +664,14 @@ export default function App() {
             <label className="flex items-end gap-2 rounded-md border border-line px-3 py-2 text-sm">
               <input type="checkbox" checked={useLlm} onChange={(event) => setUseLlm(event.target.checked)} />
               LLM extractor
+            </label>
+            <label className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">
+              <input type="checkbox" checked={useGeminiHybrid} onChange={(event) => setUseGeminiHybrid(event.target.checked)} />
+              Gemini hybrid
+            </label>
+            <label className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">
+              <input type="checkbox" checked={useAgenticLlmpops} onChange={(event) => setUseAgenticLlmpops(event.target.checked)} />
+              Agent evaluator
             </label>
           </div>
 
