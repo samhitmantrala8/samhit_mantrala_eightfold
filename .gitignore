@@ -12,3 +12,4 @@ outputs/*.tmp
 outputs/*test_result*.json
 design/*.png
 .runtime/
+docs/demo_script.md
