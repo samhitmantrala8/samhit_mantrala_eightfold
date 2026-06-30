@@ -2,11 +2,6 @@
 
 React, Tailwind CSS, Flask, and a hybrid deterministic plus Gemini evaluation pipeline for transforming messy candidate data into a clean canonical recruiting profile and a recruiter-configurable custom output schema.
 
-## Submission Links
-
-- [Demo video](https://drive.google.com/file/d/1DRub1W5JejM3rd1olBlqDQZeUExM6ez_/view?usp=drive_link) - also uploaded in the Google Form.
-- [One-pager document](https://drive.google.com/file/d/1dCMJMVouwzVmy4h9k_txlQtdCw9qoAL9/view?usp=sharing) - also uploaded in the Google Form.
-
 ## Testing Screenshots
 
 The following screenshots are included in this repository and rendered directly in the README.
@@ -257,3 +252,8 @@ The latest local verification included focused backend tests and a frontend prod
 - The application returns conservative `null` or omitted fields when it cannot verify a value confidently.
 - LinkedIn URLs are normalized and stored when supplied, but the project avoids unreliable LinkedIn scraping.
 - The backend terminal logs each major processing step so extraction behavior can be inspected during demos.
+
+## Submission Links
+
+- [Demo video](https://drive.google.com/file/d/1DRub1W5JejM3rd1olBlqDQZeUExM6ez_/view?usp=drive_link) - also uploaded in the Google Form.
+- [One-pager document](https://drive.google.com/file/d/1dCMJMVouwzVmy4h9k_txlQtdCw9qoAL9/view?usp=sharing) - also uploaded in the Google Form.
