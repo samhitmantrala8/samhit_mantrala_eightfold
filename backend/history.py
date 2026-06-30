@@ -54,10 +54,20 @@ def connect() -> sqlite3.Connection:
             score REAL NOT NULL,
             input_excerpt TEXT NOT NULL,
             output_preview TEXT NOT NULL,
-            evaluator_json TEXT NOT NULL
+            evaluator_json TEXT NOT NULL,
+            example_input_json TEXT,
+            example_output_json TEXT
         )
         """
     )
+    existing_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(llmops_examples)").fetchall()
+    }
+    if "example_input_json" not in existing_columns:
+        connection.execute("ALTER TABLE llmops_examples ADD COLUMN example_input_json TEXT")
+    if "example_output_json" not in existing_columns:
+        connection.execute("ALTER TABLE llmops_examples ADD COLUMN example_output_json TEXT")
     return connection
 
 
@@ -142,53 +152,77 @@ def record_llmops_trace(trace: dict[str, Any]) -> int:
                 trace_json,
             ),
         )
-        if score >= 8.0 or score < 8.0:
+        good_examples = [
+            example
+            for example in trace.get("good_examples", [])
+            if float(example.get("score") or 0.0) >= 8.0
+        ]
+        if not good_examples and score >= 8.0:
+            good_examples = [
+                {
+                    "task_type": task_type,
+                    "score": score,
+                    "input": trace.get("input_excerpt") or {},
+                    "output": trace.get("output_preview") or {},
+                    "evaluation": trace.get("final_evaluation") or {},
+                }
+            ]
+        for example in good_examples:
+            example_task_type = str(example.get("task_type") or task_type)
+            example_score = float(example.get("score") or score)
+            example_input = example.get("input") or {}
+            example_output = example.get("output") or {}
+            example_evaluator = example.get("evaluation") or {}
             connection.execute(
                 """
                 INSERT INTO llmops_examples (
-                    created_at, task_type, quality, score, input_excerpt, output_preview, evaluator_json
+                    created_at, task_type, quality, score, input_excerpt, output_preview, evaluator_json,
+                    example_input_json, example_output_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
-                    task_type,
-                    quality,
-                    score,
-                    input_excerpt,
-                    output_preview,
-                    evaluator_json,
+                    example_task_type,
+                    "good",
+                    example_score,
+                    json.dumps(example_input, ensure_ascii=False),
+                    json.dumps(example_output, ensure_ascii=False),
+                    json.dumps(example_evaluator, ensure_ascii=False),
+                    json.dumps(example_input, ensure_ascii=False),
+                    json.dumps(example_output, ensure_ascii=False),
                 ),
             )
         trace_id = int(cursor.lastrowid)
-        logger.info("history record_llmops_trace id=%s task_type=%s quality=%s score=%s", trace_id, task_type, quality, score)
+        logger.info("history record_llmops_trace id=%s task_type=%s quality=%s score=%s good_examples=%s", trace_id, task_type, quality, score, len(good_examples))
         return trace_id
 
 
 def recent_llmops_examples(task_type: str = "candidate_profile_agent", limit: int = 6) -> list[dict[str, Any]]:
     logger.info("history recent_llmops_examples task_type=%s limit=%s", task_type, limit)
-    per_quality = max(1, limit // 2)
     examples: list[dict[str, Any]] = []
     with connect() as connection:
-        for quality in ("good", "bad"):
-            rows = connection.execute(
-                """
-                SELECT id, created_at, task_type, quality, score, input_excerpt, output_preview, evaluator_json
-                FROM llmops_examples
-                WHERE task_type = ? AND quality = ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (task_type, quality, per_quality),
-            ).fetchall()
-            for row in rows:
-                item = dict(row)
-                for key in ("input_excerpt", "output_preview", "evaluator_json"):
-                    try:
-                        item[key] = json.loads(item[key])
-                    except (TypeError, json.JSONDecodeError):
-                        item[key] = {}
-                examples.append(item)
+        rows = connection.execute(
+            """
+            SELECT id, created_at, task_type, quality, score, input_excerpt, output_preview, evaluator_json,
+                   example_input_json, example_output_json
+            FROM llmops_examples
+            WHERE task_type LIKE ? AND quality = 'good' AND score >= 8.0
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (f"{task_type}%", limit),
+        ).fetchall()
+        for row in rows:
+            item = dict(row)
+            for key in ("input_excerpt", "output_preview", "evaluator_json", "example_input_json", "example_output_json"):
+                try:
+                    item[key] = json.loads(item[key]) if item.get(key) else {}
+                except (TypeError, json.JSONDecodeError):
+                    item[key] = {}
+            item["example_input"] = item.pop("example_input_json") or item.get("input_excerpt") or {}
+            item["example_output"] = item.pop("example_output_json") or item.get("output_preview") or {}
+            examples.append(item)
     return examples[:limit]
 
 

@@ -18,7 +18,7 @@ from backend.transformer.normalizers.skills import canonicalize_skill, normalize
 logger = logging.getLogger(__name__)
 
 TASK_TYPE = "candidate_profile_agent"
-DEFAULT_SCORE_THRESHOLD = 8.5
+DEFAULT_SCORE_THRESHOLD = 8.0
 DEFAULT_MAX_LOOPS = 3
 MIN_SCORE_IMPROVEMENT = 0.3
 
@@ -32,31 +32,43 @@ PLANNER_SCHEMA = {
                 "properties": {
                     "name": {"type": "string"},
                     "purpose": {"type": "string"},
+                    "mode": {"type": "string", "enum": ["deterministic", "react"]},
+                    "target_fields": {"type": "array", "items": {"type": "string"}},
                     "priority": {"type": "integer"},
                 },
-                "required": ["name", "purpose", "priority"],
+                "required": ["name", "purpose", "mode", "target_fields", "priority"],
             },
         }
     },
     "required": ["tasks"],
 }
 
-EVALUATOR_SCHEMA = {
+REACT_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rationale_summary": {"type": "string"},
+        "confidence": {"type": "number"},
+        "proposed_output": {
+            "type": "object",
+            "properties": {
+                "profile_summary": {"type": "string"},
+                "skills_add": {"type": "array", "items": {"type": "string"}},
+                "skills_remove": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": "string"},
+            },
+            "required": ["profile_summary", "skills_add", "skills_remove", "notes"],
+        },
+    },
+    "required": ["rationale_summary", "confidence", "proposed_output"],
+}
+
+REACT_EVALUATOR_SCHEMA = {
     "type": "object",
     "properties": {
         "score": {"type": "number"},
+        "passed": {"type": "boolean"},
+        "use_output": {"type": "boolean"},
         "verdict": {"type": "string"},
-        "field_scores": {
-            "type": "object",
-            "properties": {
-                "coverage": {"type": "number"},
-                "factuality": {"type": "number"},
-                "schema": {"type": "number"},
-                "deduplication": {"type": "number"},
-                "confidence": {"type": "number"},
-            },
-            "required": ["coverage", "factuality", "schema", "deduplication", "confidence"],
-        },
         "issues": {
             "type": "array",
             "items": {
@@ -83,57 +95,58 @@ EVALUATOR_SCHEMA = {
             },
         },
     },
-    "required": ["score", "verdict", "field_scores", "issues", "improvement_hints"],
+    "required": ["score", "passed", "use_output", "verdict", "issues", "improvement_hints"],
 }
 
-REFINER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "profile_summary": {"type": "string"},
-        "skills_add": {"type": "array", "items": {"type": "string"}},
-        "skills_remove": {"type": "array", "items": {"type": "string"}},
-        "confidence": {"type": "number"},
-        "notes": {"type": "string"},
-    },
-    "required": ["profile_summary", "skills_add", "skills_remove", "confidence", "notes"],
-}
-
-PLANNER_SYSTEM_PROMPT = """You decompose candidate profile quality checks into small deterministic tasks.
+PLANNER_SYSTEM_PROMPT = """You decompose candidate-profile transformation QA into small executable tasks.
 Return only JSON matching the schema.
 
 Rules:
-- Keep the plan short and practical.
-- Prefer tasks that can be evaluated from the canonical profile and source excerpts.
-- Do not ask for browsing, training, or unbounded agent behavior.
-- Include only task names and purposes; do not modify the profile."""
-
-EVALUATOR_SYSTEM_PROMPT = """You are an LLM-as-a-judge evaluator for a candidate data transformation pipeline.
-Return only JSON matching the schema.
-
-Score from 1 to 10 using these criteria:
-- Factuality: every extracted field must be supported by source evidence or provenance.
-- Coverage: education, experience, projects, achievements, links, skills, and contact data should be present when source evidence exists.
-- Schema: canonical JSON fields should be valid and internally consistent.
-- Deduplication: duplicate skills/sections should be merged without losing distinct skills.
-- Confidence: uncertain LLM/semantic mappings should have lower confidence and clear reasons.
-
-Guardrails:
-- Penalize hallucinated skills, companies, dates, links, and claims.
-- Penalize missing high-signal sections when evidence appears in the source excerpt.
-- Be strict but not impossible. A clean evidence-backed profile can score 9+.
+- Split the main work into deterministic tasks and ReACT tasks.
+- deterministic tasks are checks that local code can answer: schema, coverage counts, duplicate skills, validation errors, provenance.
+- react tasks are ambiguity/refinement tasks that need language judgment: summary quality, missing evidence-backed skills, semantic section review, hallucination review.
+- Keep 4-6 tasks total.
+- Do not modify the candidate profile in this planner.
 - Do not reveal or request API keys."""
 
-REFINER_SYSTEM_PROMPT = """You are a bounded profile refiner.
-Return only JSON matching the schema.
+REACT_TASK_PROMPT_TEMPLATE = """You are one bounded ReACT-style agent inside a candidate data transformer.
+Task name: {task_name}
+Task purpose: {task_purpose}
+Target fields: {target_fields}
 
-Allowed output:
-- A better profile_summary using only supported facts.
-- skills_add for skills explicitly present in the source excerpts.
-- skills_remove only for exact duplicates or clearly unsupported skill labels.
-- notes explaining the intended refinement.
+Good examples from memory are provided below. They are examples that previously scored >= 8/10.
+Use them as style and decision guidance, but do not copy unsupported facts.
 
-Do not invent companies, dates, degrees, projects, achievements, links, or contact details.
-Do not rewrite the whole profile. The deterministic extractor remains the source of truth."""
+GOOD_EXAMPLES_JSON:
+{good_examples_json}
+
+Operational rules:
+- Use a ReACT discipline internally: inspect the task input, choose a safe action, produce a candidate output, then wait for evaluator feedback in the next loop.
+- Return only JSON matching the provided schema.
+- Do not expose hidden chain-of-thought. Put only a concise rationale_summary with observable reasons and evidence references.
+- You may propose only profile_summary and evidence-backed skills_add/skills_remove.
+- Do not invent companies, dates, degrees, projects, achievements, links, emails, phone numbers, or locations.
+- Any skill you add must appear in the source excerpt or already be supported by canonical profile evidence.
+- If unsure, leave arrays empty and explain uncertainty in notes.
+- The deterministic extractor remains the source of truth."""
+
+REACT_EVALUATOR_PROMPT_TEMPLATE = """You are the evaluator tool for one bounded ReACT agent task.
+Task name: {task_name}
+Task purpose: {task_purpose}
+Target fields: {target_fields}
+
+Score the candidate output from 1 to 10.
+Set passed=true and use_output=true only when score >= 8 and the output is supported by the source/canonical profile.
+Set use_output=false for unsupported, hallucinated, overly broad, duplicate, or schema-unsafe output.
+
+Criteria:
+- factuality: every proposed change is supported by source evidence.
+- coverage: the task objective is addressed.
+- schema safety: output fits allowed fields and types.
+- deduplication: output does not add duplicate skills or repeated claims.
+- confidence: uncertainty is represented conservatively.
+
+Return only JSON matching the schema. Do not reveal or request API keys."""
 
 
 def gemini_model() -> str:
@@ -145,6 +158,11 @@ def parse_json_text(text: str) -> dict[str, Any]:
     cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
     cleaned = re.sub(r"```$", "", cleaned).strip()
     return json.loads(cleaned)
+
+
+def slug(value: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    return cleaned or "task"
 
 
 def call_gemini_json(
@@ -187,23 +205,15 @@ def call_gemini_json(
                 timeout=60,
             )
             elapsed = round(time.perf_counter() - start, 2)
-            events.append(
-                {
-                    "task": task_name,
-                    "model": model,
-                    "key_index": key_position,
-                    "status": response.status_code,
-                    "seconds": elapsed,
-                }
-            )
-            logger.info(
-                "gemini_json call response task=%s model=%s key_index=%s status=%s seconds=%s",
-                task_name,
-                model,
-                key_position,
-                response.status_code,
-                elapsed,
-            )
+            event = {
+                "task": task_name,
+                "model": model,
+                "key_index": key_position,
+                "status": response.status_code,
+                "seconds": elapsed,
+            }
+            events.append(event)
+            logger.info("gemini_json response task=%s key_index=%s status=%s seconds=%s", task_name, key_position, response.status_code, elapsed)
             if response.status_code in {403, 429, 503}:
                 errors.append(f"{task_name}: Gemini returned status {response.status_code}")
                 logger.warning("gemini_json retryable_status task=%s key_index=%s status=%s", task_name, key_position, response.status_code)
@@ -217,7 +227,7 @@ def call_gemini_json(
             elapsed = round(time.perf_counter() - start, 2)
             events.append({"task": task_name, "model": model, "key_index": key_position, "error": str(exc), "seconds": elapsed})
             errors.append(f"{task_name}: Gemini call failed: {exc}")
-            logger.exception("gemini_json call failed task=%s key_index=%s seconds=%s", task_name, key_position, elapsed)
+            logger.exception("gemini_json failed task=%s key_index=%s seconds=%s", task_name, key_position, elapsed)
 
     logger.warning("gemini_json exhausted_keys task=%s attempts=%s errors=%s", task_name, len(keys), len(errors))
     return None, errors, events
@@ -250,7 +260,7 @@ def compact_profile(profile: dict[str, Any]) -> dict[str, Any]:
         "achievements": safe_list(profile.get("achievements"), 8),
         "skills": safe_list(profile.get("skills"), 80),
         "resume_sections": profile.get("resume_sections") or {},
-        "semantic_mappings": safe_list(profile.get("semantic_mappings"), 30),
+        "semantic_mappings": safe_list(profile.get("semantic_mappings"), 40),
         "profile_summary": profile.get("profile_summary"),
         "overall_confidence": profile.get("overall_confidence"),
         "extraction_errors": safe_list(profile.get("extraction_errors"), 20),
@@ -300,11 +310,11 @@ def compact_examples(examples: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in examples[:6]:
         compacted.append(
             {
-                "quality": item.get("quality"),
+                "task_type": item.get("task_type"),
                 "score": item.get("score"),
-                "input_excerpt": item.get("input_excerpt"),
-                "output_preview": item.get("output_preview"),
-                "evaluator_json": item.get("evaluator_json"),
+                "input": item.get("example_input") or item.get("input_excerpt"),
+                "output": item.get("example_output") or item.get("output_preview"),
+                "evaluation": item.get("evaluator_json"),
             }
         )
     return compacted
@@ -312,122 +322,157 @@ def compact_examples(examples: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def deterministic_plan() -> list[dict[str, Any]]:
     return [
-        {"name": "schema_and_required_fields", "purpose": "Check canonical shape and required field coverage.", "priority": 1},
-        {"name": "evidence_and_hallucination", "purpose": "Compare extracted fields against source excerpts and provenance.", "priority": 2},
-        {"name": "skill_section_deduplication", "purpose": "Check duplicated or mismapped sections and skills.", "priority": 3},
-        {"name": "summary_quality", "purpose": "Ensure the summary covers evidence-backed education, experience, projects, achievements, and skills.", "priority": 4},
-    ]
-
-
-def deterministic_evaluation(profile: dict[str, Any], validation_errors: list[str]) -> dict[str, Any]:
-    coverage_parts = [
-        bool(profile.get("full_name")),
-        bool(profile.get("emails") or profile.get("phones")),
-        bool(profile.get("education")),
-        bool(profile.get("experience")),
-        bool(profile.get("projects")),
-        bool(profile.get("skills")),
-    ]
-    coverage = 10 * sum(coverage_parts) / len(coverage_parts)
-    schema = 10.0 if not validation_errors else max(1.0, 10.0 - 1.5 * len(validation_errors))
-    skill_names = [skill.get("name") for skill in profile.get("skills", []) if skill.get("name")]
-    duplicate_count = len(skill_names) - len(set(skill_names))
-    dedupe = max(1.0, 10.0 - duplicate_count)
-    confidence = 10.0 * float(profile.get("overall_confidence") or 0.5)
-    factuality = 8.0 if profile.get("provenance") else 6.0
-    score = round((coverage * 0.3) + (factuality * 0.25) + (schema * 0.2) + (dedupe * 0.15) + (confidence * 0.1), 2)
-    issues = []
-    if not profile.get("education"):
-        issues.append({"field": "education", "severity": "medium", "problem": "No education facts extracted.", "evidence": "Deterministic coverage check"})
-    if not profile.get("experience"):
-        issues.append({"field": "experience", "severity": "medium", "problem": "No experience facts extracted.", "evidence": "Deterministic coverage check"})
-    for error in validation_errors[:5]:
-        issues.append({"field": "schema", "severity": "high", "problem": error, "evidence": "Local schema validator"})
-    return {
-        "score": clamp_score(score),
-        "verdict": "deterministic fallback evaluation",
-        "field_scores": {
-            "coverage": round(coverage, 2),
-            "factuality": factuality,
-            "schema": schema,
-            "deduplication": dedupe,
-            "confidence": round(confidence, 2),
+        {
+            "name": "schema_validation",
+            "purpose": "Check canonical schema and validator errors with local code.",
+            "mode": "deterministic",
+            "target_fields": ["validation_errors", "canonical_profile"],
+            "priority": 1,
         },
-        "issues": issues,
-        "improvement_hints": [],
-    }
+        {
+            "name": "coverage_check",
+            "purpose": "Check whether high-signal profile sections were extracted.",
+            "mode": "deterministic",
+            "target_fields": ["education", "experience", "projects", "achievements", "skills", "links"],
+            "priority": 2,
+        },
+        {
+            "name": "dedupe_confidence_check",
+            "purpose": "Check duplicate skills and confidence/provenance coverage.",
+            "mode": "deterministic",
+            "target_fields": ["skills", "provenance", "overall_confidence"],
+            "priority": 3,
+        },
+        {
+            "name": "summary_and_skill_refinement",
+            "purpose": "Use language judgment to improve summary and identify evidence-backed missing skills.",
+            "mode": "react",
+            "target_fields": ["profile_summary", "skills"],
+            "priority": 4,
+        },
+        {
+            "name": "semantic_mapping_review",
+            "purpose": "Review ambiguous headings and LLM semantic mapping quality.",
+            "mode": "react",
+            "target_fields": ["semantic_mappings", "resume_sections"],
+            "priority": 5,
+        },
+    ]
 
 
-def build_agent_payload(
-    profile: dict[str, Any],
-    source_texts: list[str],
-    validation_errors: list[str],
-    memory_examples: list[dict[str, Any]],
-    tasks: list[dict[str, Any]] | None = None,
-    evaluation: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    payload = {
-        "task_type": TASK_TYPE,
-        "canonical_profile": compact_profile(profile),
-        "source_excerpt": source_excerpt(source_texts),
-        "validation_errors": validation_errors,
-        "memory_examples": compact_examples(memory_examples),
-    }
-    if tasks is not None:
-        payload["decomposed_tasks"] = tasks
-    if evaluation is not None:
-        payload["previous_evaluation"] = evaluation
-    return payload
+def normalize_task(raw: dict[str, Any], fallback_priority: int) -> dict[str, Any]:
+    name = str(raw.get("name") or f"task_{fallback_priority}").strip()
+    purpose = str(raw.get("purpose") or "Check candidate profile quality.").strip()
+    mode = raw.get("mode") if raw.get("mode") in {"deterministic", "react"} else "react"
+    target_fields = [str(item) for item in safe_list(raw.get("target_fields"), 8) if str(item).strip()]
+    if not target_fields:
+        target_fields = ["canonical_profile"]
+    try:
+        priority = int(raw.get("priority", fallback_priority))
+    except (TypeError, ValueError):
+        priority = fallback_priority
+    return {"name": name, "purpose": purpose, "mode": mode, "target_fields": target_fields, "priority": priority}
 
 
-def plan_tasks(profile: dict[str, Any], source_texts: list[str], memory_examples: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]]]:
+def ensure_base_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    names = {slug(task["name"]) for task in tasks}
+    base = deterministic_plan()
+    for task in base[:3]:
+        if slug(task["name"]) not in names:
+            tasks.append(task)
+    tasks.sort(key=lambda item: item.get("priority", 99))
+    return tasks[:6]
+
+
+def plan_tasks(profile: dict[str, Any], source_texts: list[str], memory_examples: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]], str]:
     logger.info("agent plan_tasks start source_texts=%s memory_examples=%s", len(source_texts), len(memory_examples))
+    planner_prompt = PLANNER_SYSTEM_PROMPT
     payload = {
         "canonical_profile": compact_profile(profile),
         "source_excerpt": source_excerpt(source_texts, 6000),
-        "memory_examples": compact_examples(memory_examples),
+        "good_memory_examples": compact_examples(memory_examples),
     }
-    result, errors, events = call_gemini_json("agent_task_decomposition", PLANNER_SYSTEM_PROMPT, payload, PLANNER_SCHEMA, 2048)
-    tasks = result.get("tasks") if isinstance(result, dict) else None
-    if not isinstance(tasks, list) or not tasks:
+    result, errors, events = call_gemini_json("agent_task_decomposition", planner_prompt, payload, PLANNER_SCHEMA, 2048)
+    raw_tasks = result.get("tasks") if isinstance(result, dict) else None
+    if not isinstance(raw_tasks, list) or not raw_tasks:
         logger.info("agent plan_tasks fallback deterministic errors=%s", len(errors))
-        return deterministic_plan(), errors, events
-    logger.info("agent plan_tasks done tasks=%s errors=%s", len(tasks[:6]), len(errors))
-    return tasks[:6], errors, events
+        return deterministic_plan(), errors, events, planner_prompt
+    tasks = [normalize_task(task, index) for index, task in enumerate(raw_tasks[:6], start=1) if isinstance(task, dict)]
+    tasks = ensure_base_tasks(tasks)
+    logger.info("agent plan_tasks done tasks=%s errors=%s", len(tasks), len(errors))
+    return tasks, errors, events, planner_prompt
 
 
-def evaluate_profile(
-    profile: dict[str, Any],
-    source_texts: list[str],
-    validation_errors: list[str],
-    memory_examples: list[dict[str, Any]],
-    tasks: list[dict[str, Any]],
-) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
-    logger.info("agent evaluate_profile start tasks=%s source_texts=%s", len(tasks), len(source_texts))
-    payload = build_agent_payload(profile, source_texts, validation_errors, memory_examples, tasks=tasks)
-    result, errors, events = call_gemini_json("agent_profile_evaluation", EVALUATOR_SYSTEM_PROMPT, payload, EVALUATOR_SCHEMA, 4096)
-    if not isinstance(result, dict):
-        fallback = deterministic_evaluation(profile, validation_errors)
-        logger.info("agent evaluate_profile fallback score=%s errors=%s", fallback.get("score"), len(errors))
-        return fallback, errors, events
-    result["score"] = clamp_score(result.get("score"))
-    logger.info("agent evaluate_profile done score=%s issues=%s errors=%s", result.get("score"), len(result.get("issues", [])), len(errors))
-    return result, errors, events
+def deterministic_task_output(task: dict[str, Any], profile: dict[str, Any], validation_errors: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
+    name = slug(task["name"])
+    profile_counts = {
+        "education": len(profile.get("education") or []),
+        "experience": len(profile.get("experience") or []),
+        "projects": len(profile.get("projects") or []),
+        "achievements": len(profile.get("achievements") or []),
+        "skills": len(profile.get("skills") or []),
+        "links": sum(1 for value in (profile.get("links") or {}).values() if value),
+    }
+    if name == "schema_validation":
+        score = 10.0 if not validation_errors else max(1.0, 10.0 - 1.5 * len(validation_errors))
+        issues = [
+            {"field": "schema", "severity": "high", "problem": error, "evidence": "Local schema validator"}
+            for error in validation_errors[:8]
+        ]
+        output = {"checks": {"validation_errors": validation_errors}, "summary": "Schema validation completed locally."}
+    elif name == "coverage_check":
+        required = ["education", "experience", "projects", "skills"]
+        present = sum(1 for field in required if profile_counts[field] > 0)
+        score = round(10.0 * present / len(required), 2)
+        issues = [
+            {"field": field, "severity": "medium", "problem": f"No {field} items extracted.", "evidence": "Local coverage count"}
+            for field in required
+            if profile_counts[field] == 0
+        ]
+        output = {"checks": profile_counts, "summary": "Coverage check completed locally."}
+    elif name == "dedupe_confidence_check":
+        skill_names = [skill.get("name") for skill in profile.get("skills", []) if skill.get("name")]
+        duplicate_count = len(skill_names) - len(set(skill_names))
+        provenance_count = len(profile.get("provenance") or [])
+        confidence = float(profile.get("overall_confidence") or 0)
+        score = max(1.0, 10.0 - duplicate_count - (0 if provenance_count else 2) - (0 if confidence >= 0.5 else 1))
+        issues = []
+        if duplicate_count:
+            issues.append({"field": "skills", "severity": "medium", "problem": f"{duplicate_count} duplicate skill labels found.", "evidence": "Local duplicate count"})
+        if not provenance_count:
+            issues.append({"field": "provenance", "severity": "medium", "problem": "No provenance entries present.", "evidence": "Local provenance count"})
+        output = {"checks": {"duplicate_skills": duplicate_count, "provenance_count": provenance_count, "overall_confidence": confidence}, "summary": "Dedupe and confidence check completed locally."}
+    else:
+        score = 8.0
+        issues = []
+        output = {"checks": profile_counts, "summary": "Generic deterministic check completed locally."}
+
+    evaluation = {
+        "score": clamp_score(score),
+        "passed": score >= DEFAULT_SCORE_THRESHOLD,
+        "use_output": True,
+        "verdict": output["summary"],
+        "issues": issues,
+        "improvement_hints": [],
+    }
+    return output, evaluation
 
 
-def refine_profile(
-    profile: dict[str, Any],
-    source_texts: list[str],
-    validation_errors: list[str],
-    memory_examples: list[dict[str, Any]],
-    tasks: list[dict[str, Any]],
-    evaluation: dict[str, Any],
-) -> tuple[dict[str, Any] | None, list[str], list[dict[str, Any]]]:
-    logger.info("agent refine_profile start previous_score=%s", evaluation.get("score"))
-    payload = build_agent_payload(profile, source_texts, validation_errors, memory_examples, tasks=tasks, evaluation=evaluation)
-    result, errors, events = call_gemini_json("agent_profile_refinement", REFINER_SYSTEM_PROMPT, payload, REFINER_SCHEMA, 4096)
-    logger.info("agent refine_profile done has_result=%s errors=%s", isinstance(result, dict), len(errors))
-    return result, errors, events
+def build_react_system_prompt(task: dict[str, Any], memory_examples: list[dict[str, Any]]) -> str:
+    return REACT_TASK_PROMPT_TEMPLATE.format(
+        task_name=task["name"],
+        task_purpose=task["purpose"],
+        target_fields=", ".join(task["target_fields"]),
+        good_examples_json=json.dumps(compact_examples(memory_examples), ensure_ascii=False, indent=2),
+    )
+
+
+def build_react_evaluator_prompt(task: dict[str, Any]) -> str:
+    return REACT_EVALUATOR_PROMPT_TEMPLATE.format(
+        task_name=task["name"],
+        task_purpose=task["purpose"],
+        target_fields=", ".join(task["target_fields"]),
+    )
 
 
 def source_supports_skill(raw_skill: str, source_blob: str) -> bool:
@@ -444,33 +489,33 @@ def source_supports_skill(raw_skill: str, source_blob: str) -> bool:
     return bool(re.search(rf"(?<![a-z0-9#+]){re.escape(canonical_norm)}(?![a-z0-9#+])", source_norm))
 
 
-def apply_refinement(profile: dict[str, Any], refinement: dict[str, Any], source_texts: list[str]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def apply_refinement(profile: dict[str, Any], proposed_output: dict[str, Any], source_texts: list[str], confidence: float) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     logger.info(
         "agent apply_refinement start confidence=%s proposed_skills_add=%s proposed_skills_remove=%s",
-        refinement.get("confidence"),
-        len(safe_list(refinement.get("skills_add"), 24)),
-        len(safe_list(refinement.get("skills_remove"), 24)),
+        confidence,
+        len(safe_list(proposed_output.get("skills_add"), 24)),
+        len(safe_list(proposed_output.get("skills_remove"), 24)),
     )
     updated = copy.deepcopy(profile)
     applied: list[dict[str, Any]] = []
-    confidence = max(0.0, min(1.0, float(refinement.get("confidence") or 0.0)))
+    confidence = max(0.0, min(1.0, float(confidence or 0.0)))
     source_blob = "\n".join(source_texts)
 
-    summary = str(refinement.get("profile_summary") or "").strip()
+    summary = str(proposed_output.get("profile_summary") or "").strip()
     if confidence >= 0.65 and 40 <= len(summary) <= 1200:
         updated["profile_summary"] = re.sub(r"\s+", " ", summary)
         updated.setdefault("provenance", []).append(
             {
                 "field": "profile_summary",
-                "source": "gemini-agent:evaluator-loop",
-                "method": "agentic-summary-refinement",
+                "source": "gemini-react-agent:evaluator-approved",
+                "method": "react-agent-summary-refinement",
                 "confidence": round(min(0.78, confidence), 3),
             }
         )
         applied.append({"field": "profile_summary", "action": "replace", "confidence": round(confidence, 3)})
 
     existing = {normalize_token(skill.get("name", "")): skill for skill in updated.get("skills", [])}
-    for raw_skill in safe_list(refinement.get("skills_add"), 24):
+    for raw_skill in safe_list(proposed_output.get("skills_add"), 24):
         canonical = canonicalize_skill(str(raw_skill))
         if not canonical:
             continue
@@ -483,15 +528,15 @@ def apply_refinement(profile: dict[str, Any], refinement: dict[str, Any], source
         new_skill = {
             "name": skill_name,
             "confidence": round(min(0.72, max(0.55, confidence * canonical_confidence)), 3),
-            "sources": ["gemini-agent:evidence-backed-refinement"],
+            "sources": ["gemini-react-agent:evaluator-approved"],
         }
         updated.setdefault("skills", []).append(new_skill)
         existing[skill_key] = new_skill
         updated.setdefault("provenance", []).append(
             {
                 "field": "skills",
-                "source": "gemini-agent:evidence-backed-refinement",
-                "method": "agentic-skill-add",
+                "source": "gemini-react-agent:evaluator-approved",
+                "method": "react-agent-skill-add",
                 "confidence": new_skill["confidence"],
                 "evidence": str(raw_skill)[:120],
             }
@@ -501,6 +546,202 @@ def apply_refinement(profile: dict[str, Any], refinement: dict[str, Any], source
     updated["skills"] = sorted(updated.get("skills", []), key=lambda item: (-float(item.get("confidence") or 0), item.get("name") or ""))
     logger.info("agent apply_refinement done applied_changes=%s", len(applied))
     return updated, applied
+
+
+def run_deterministic_task(task: dict[str, Any], profile: dict[str, Any], validation_errors: list[str], threshold: float) -> dict[str, Any]:
+    output, evaluation = deterministic_task_output(task, profile, validation_errors)
+    score = clamp_score(evaluation.get("score"))
+    passed = score >= threshold
+    return {
+        "task_name": task["name"],
+        "purpose": task["purpose"],
+        "mode": "deterministic",
+        "target_fields": task["target_fields"],
+        "system_prompt": "Deterministic local task. No LLM system prompt was used.",
+        "evaluator_prompt": "Deterministic local evaluator. No LLM evaluator prompt was used.",
+        "loops": 1,
+        "final_score": score,
+        "passed": passed,
+        "accepted": passed,
+        "stopping_reason": "deterministic task completed",
+        "final_output": output,
+        "iterations": [
+            {
+                "loop": 1,
+                "action": "local_check",
+                "observation": output,
+                "rationale_summary": "Local deterministic rules evaluated this task without an LLM call.",
+                "evaluation": evaluation,
+                "score": score,
+                "passed": passed,
+                "request_events": [],
+            }
+        ],
+        "request_events": [],
+    }
+
+
+def react_user_payload(
+    task: dict[str, Any],
+    profile: dict[str, Any],
+    source_texts: list[str],
+    validation_errors: list[str],
+    previous_evaluation: dict[str, Any] | None,
+) -> dict[str, Any]:
+    payload = {
+        "task": task,
+        "canonical_profile": compact_profile(profile),
+        "source_excerpt": source_excerpt(source_texts),
+        "validation_errors": validation_errors,
+    }
+    if previous_evaluation:
+        payload["previous_evaluation"] = previous_evaluation
+    return payload
+
+
+def run_react_task(
+    task: dict[str, Any],
+    profile: dict[str, Any],
+    source_texts: list[str],
+    validation_errors: list[str],
+    memory_examples: list[dict[str, Any]],
+    max_loops: int,
+    threshold: float,
+) -> tuple[dict[str, Any], dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+    system_prompt = build_react_system_prompt(task, memory_examples)
+    evaluator_prompt = build_react_evaluator_prompt(task)
+    errors: list[str] = []
+    request_events: list[dict[str, Any]] = []
+    iterations: list[dict[str, Any]] = []
+    best_score = 0.0
+    previous_score = 0.0
+    stagnant_loops = 0
+    accepted_output: dict[str, Any] | None = None
+    accepted_evaluation: dict[str, Any] | None = None
+    stopping_reason = "max loops reached"
+    previous_evaluation: dict[str, Any] | None = None
+
+    for loop_index in range(1, max_loops + 1):
+        task_slug = slug(task["name"])
+        logger.info("react task loop start task=%s loop=%s", task["name"], loop_index)
+        candidate, candidate_errors, candidate_events = call_gemini_json(
+            f"react_{task_slug}_generate_loop_{loop_index}",
+            system_prompt,
+            react_user_payload(task, profile, source_texts, validation_errors, previous_evaluation),
+            REACT_OUTPUT_SCHEMA,
+            4096,
+        )
+        errors.extend(candidate_errors)
+        request_events.extend(candidate_events)
+
+        iteration: dict[str, Any] = {
+            "loop": loop_index,
+            "action": "generate_candidate",
+            "request_events": list(candidate_events),
+            "candidate_output": candidate,
+            "rationale_summary": candidate.get("rationale_summary") if isinstance(candidate, dict) else "No candidate output was produced.",
+        }
+        if not isinstance(candidate, dict):
+            iteration["observation"] = "Gemini did not return a valid candidate JSON object."
+            iteration["score"] = 1.0
+            iteration["passed"] = False
+            iterations.append(iteration)
+            stopping_reason = "candidate generation failed"
+            break
+
+        proposed_output = candidate.get("proposed_output") if isinstance(candidate.get("proposed_output"), dict) else {}
+        evaluator_payload = {
+            "task": task,
+            "canonical_profile": compact_profile(profile),
+            "source_excerpt": source_excerpt(source_texts),
+            "candidate_output": proposed_output,
+            "candidate_rationale_summary": candidate.get("rationale_summary"),
+            "candidate_confidence": candidate.get("confidence"),
+            "validation_errors": validation_errors,
+        }
+        evaluation, eval_errors, eval_events = call_gemini_json(
+            f"react_{task_slug}_evaluate_loop_{loop_index}",
+            evaluator_prompt,
+            evaluator_payload,
+            REACT_EVALUATOR_SCHEMA,
+            4096,
+        )
+        errors.extend(eval_errors)
+        request_events.extend(eval_events)
+        iteration["request_events"].extend(eval_events)
+
+        if not isinstance(evaluation, dict):
+            evaluation = {
+                "score": 1.0,
+                "passed": False,
+                "use_output": False,
+                "verdict": "Evaluator did not return a valid JSON object.",
+                "issues": [],
+                "improvement_hints": [],
+            }
+        evaluation["score"] = clamp_score(evaluation.get("score"))
+        evaluation["passed"] = bool(evaluation.get("passed")) and evaluation["score"] >= threshold
+        evaluation["use_output"] = bool(evaluation.get("use_output")) and evaluation["passed"]
+        previous_evaluation = evaluation
+        score = evaluation["score"]
+        best_score = max(best_score, score)
+        iteration["evaluation"] = evaluation
+        iteration["score"] = score
+        iteration["passed"] = evaluation["passed"]
+        iteration["observation"] = evaluation.get("verdict")
+        iterations.append(iteration)
+        logger.info("react task evaluated task=%s loop=%s score=%s passed=%s", task["name"], loop_index, score, evaluation["passed"])
+
+        if evaluation["passed"] and evaluation["use_output"]:
+            accepted_output = candidate
+            accepted_evaluation = evaluation
+            stopping_reason = "score threshold reached"
+            break
+        if loop_index >= max_loops:
+            break
+        if score - previous_score < MIN_SCORE_IMPROVEMENT and loop_index > 1:
+            stagnant_loops += 1
+        else:
+            stagnant_loops = 0
+        previous_score = score
+        if stagnant_loops >= 2:
+            stopping_reason = "score stopped improving"
+            break
+
+    final_score = clamp_score(accepted_evaluation.get("score") if accepted_evaluation else best_score or 1.0)
+    task_trace = {
+        "task_name": task["name"],
+        "purpose": task["purpose"],
+        "mode": "react",
+        "target_fields": task["target_fields"],
+        "system_prompt": system_prompt,
+        "evaluator_prompt": evaluator_prompt,
+        "loops": len(iterations),
+        "final_score": final_score,
+        "passed": bool(accepted_output and final_score >= threshold),
+        "accepted": bool(accepted_output and final_score >= threshold),
+        "stopping_reason": stopping_reason,
+        "final_output": accepted_output.get("proposed_output") if isinstance(accepted_output, dict) else None,
+        "discarded": not bool(accepted_output and final_score >= threshold),
+        "iterations": iterations,
+        "request_events": request_events,
+    }
+    good_examples = []
+    if accepted_output and accepted_evaluation and final_score >= threshold:
+        good_examples.append(
+            {
+                "task_type": f"{TASK_TYPE}:{slug(task['name'])}",
+                "score": final_score,
+                "input": {
+                    "task": task,
+                    "canonical_profile": compact_profile(profile),
+                    "source_excerpt": source_excerpt(source_texts, 1600),
+                },
+                "output": accepted_output.get("proposed_output"),
+                "evaluation": accepted_evaluation,
+            }
+        )
+    return task_trace, accepted_output, good_examples, errors
 
 
 def env_int(name: str, default: int) -> int:
@@ -527,15 +768,15 @@ def run_agentic_llmops(
 ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
     validation_errors = validation_errors or []
     memory_examples = memory_examples or []
-    max_loops = max_loops or env_int("AGENT_MAX_LOOPS", DEFAULT_MAX_LOOPS)
-    max_loops = min(max_loops, 5)
+    max_loops = min(max_loops or env_int("AGENT_MAX_LOOPS", DEFAULT_MAX_LOOPS), 5)
     score_threshold = score_threshold or env_float("AGENT_SCORE_THRESHOLD", DEFAULT_SCORE_THRESHOLD)
     working = copy.deepcopy(profile)
     errors: list[str] = []
     request_events: list[dict[str, Any]] = []
+    good_examples_to_store: list[dict[str, Any]] = []
     llm_available = bool(configured_gemini_keys())
     logger.info(
-        "agent run start llm_available=%s max_loops=%s score_threshold=%s memory_examples=%s validation_errors=%s",
+        "agent run start llm_available=%s max_loops=%s score_threshold=%s good_memory_examples=%s validation_errors=%s",
         llm_available,
         max_loops,
         score_threshold,
@@ -544,126 +785,92 @@ def run_agentic_llmops(
     )
 
     if llm_available:
-        tasks, task_errors, task_events = plan_tasks(working, source_texts, memory_examples)
+        tasks, task_errors, task_events, planner_prompt = plan_tasks(working, source_texts, memory_examples)
         errors.extend(task_errors)
         request_events.extend(task_events)
     else:
         tasks = deterministic_plan()
-    logger.info("agent tasks ready count=%s mode=%s", len(tasks), "llm" if llm_available else "deterministic")
+        planner_prompt = "Deterministic fallback planner. Gemini keys were not configured."
 
     trace: dict[str, Any] = {
         "enabled": True,
         "task_type": TASK_TYPE,
-        "mode": "bounded-gemini-evaluator-loop" if llm_available else "deterministic-fallback-evaluator",
+        "mode": "per-task-react-agents" if llm_available else "deterministic-fallback-evaluator",
         "model": gemini_model(),
         "score_threshold": score_threshold,
         "max_loops": max_loops,
         "memory_examples_used": len(memory_examples),
+        "planner_prompt": planner_prompt,
         "tasks": tasks,
+        "task_traces": [],
         "iterations": [],
         "request_events": request_events,
         "input_excerpt": trace_input_excerpt(profile, source_texts),
     }
 
-    best_profile = copy.deepcopy(working)
-    best_score = 0.0
-    previous_score = 0.0
-    stagnant_loops = 0
-    stopping_reason = "max loops reached"
-    final_evaluation: dict[str, Any] = {}
+    for task in tasks:
+        normalized = normalize_task(task, len(trace["task_traces"]) + 1)
+        if normalized["mode"] == "deterministic" or not llm_available:
+            task_trace = run_deterministic_task(normalized, working, validation_errors, score_threshold)
+            trace["task_traces"].append(task_trace)
+            continue
 
-    for loop_index in range(1, max_loops + 1):
-        logger.info("agent loop start loop=%s", loop_index)
-        if llm_available:
-            evaluation, eval_errors, eval_events = evaluate_profile(working, source_texts, validation_errors, memory_examples, tasks)
-            errors.extend(eval_errors)
-            request_events.extend(eval_events)
+        task_trace, accepted_output, good_examples, task_errors = run_react_task(
+            normalized,
+            working,
+            source_texts,
+            validation_errors,
+            memory_examples,
+            max_loops,
+            score_threshold,
+        )
+        errors.extend(task_errors)
+        trace["task_traces"].append(task_trace)
+        request_events.extend(task_trace.get("request_events", []))
+        good_examples_to_store.extend(good_examples)
+
+        if accepted_output and task_trace.get("accepted"):
+            proposed_output = accepted_output.get("proposed_output") if isinstance(accepted_output.get("proposed_output"), dict) else {}
+            confidence = float(accepted_output.get("confidence") or 0.0)
+            working, applied = apply_refinement(working, proposed_output, source_texts, confidence)
+            task_trace["applied_changes"] = applied
         else:
-            evaluation = deterministic_evaluation(working, validation_errors)
-            eval_events = []
+            task_trace["applied_changes"] = []
 
-        score = clamp_score(evaluation.get("score"))
-        logger.info("agent loop evaluation loop=%s score=%s best_score=%s", loop_index, score, best_score)
-        final_evaluation = evaluation
-        iteration: dict[str, Any] = {
-            "loop": loop_index,
-            "score": score,
-            "evaluation": evaluation,
-            "request_events": eval_events,
-            "applied_changes": [],
-        }
+    task_scores = [float(task.get("final_score") or 0.0) for task in trace["task_traces"]]
+    final_score = round(sum(task_scores) / len(task_scores), 2) if task_scores else 0.0
+    passed_tasks = sum(1 for task in trace["task_traces"] if task.get("passed"))
+    stopping_reason = "completed per-task execution"
+    final_evaluation = {
+        "score": final_score,
+        "passed": bool(task_scores and all(score >= score_threshold for score in task_scores)),
+        "verdict": f"{passed_tasks}/{len(task_scores)} decomposed tasks passed.",
+        "issues": [
+            {
+                "field": task.get("task_name"),
+                "severity": "medium",
+                "problem": task.get("stopping_reason"),
+                "evidence": f"score={task.get('final_score')}",
+            }
+            for task in trace["task_traces"]
+            if not task.get("passed")
+        ],
+    }
 
-        if score > best_score:
-            best_score = score
-            best_profile = copy.deepcopy(working)
-
-        if score >= score_threshold:
-            stopping_reason = "score threshold reached"
-            logger.info("agent stop reason=%s loop=%s score=%s", stopping_reason, loop_index, score)
-            trace["iterations"].append(iteration)
-            break
-
-        if loop_index >= max_loops:
-            logger.info("agent stop reason=max loops reached loop=%s score=%s", loop_index, score)
-            trace["iterations"].append(iteration)
-            break
-
-        if score - previous_score < MIN_SCORE_IMPROVEMENT and loop_index > 1:
-            stagnant_loops += 1
-        else:
-            stagnant_loops = 0
-        previous_score = score
-
-        if stagnant_loops >= 2:
-            stopping_reason = "score stopped improving"
-            logger.info("agent stop reason=%s loop=%s stagnant_loops=%s", stopping_reason, loop_index, stagnant_loops)
-            trace["iterations"].append(iteration)
-            break
-
-        if not llm_available:
-            stopping_reason = "Gemini keys not configured"
-            logger.info("agent stop reason=%s", stopping_reason)
-            trace["iterations"].append(iteration)
-            break
-
-        refinement, refine_errors, refine_events = refine_profile(working, source_texts, validation_errors, memory_examples, tasks, evaluation)
-        errors.extend(refine_errors)
-        request_events.extend(refine_events)
-        iteration["request_events"].extend(refine_events)
-        if not isinstance(refinement, dict):
-            stopping_reason = "refiner unavailable"
-            logger.info("agent stop reason=%s loop=%s", stopping_reason, loop_index)
-            trace["iterations"].append(iteration)
-            break
-
-        refined_profile, applied = apply_refinement(working, refinement, source_texts)
-        iteration["refinement"] = {
-            "confidence": refinement.get("confidence"),
-            "notes": refinement.get("notes"),
-            "skills_add": safe_list(refinement.get("skills_add"), 20),
-            "skills_remove": safe_list(refinement.get("skills_remove"), 20),
-        }
-        iteration["applied_changes"] = applied
-        trace["iterations"].append(iteration)
-        if not applied:
-            stopping_reason = "no safe supported changes from refiner"
-            logger.info("agent stop reason=%s loop=%s", stopping_reason, loop_index)
-            break
-        working = refined_profile
-
-    best_profile["llmops"] = {
+    working["llmops"] = {
         key: value
         for key, value in trace.items()
         if key not in {"input_excerpt"}
     }
-    best_profile["llmops"]["final_score"] = best_score
-    best_profile["llmops"]["stopping_reason"] = stopping_reason
-    best_profile["llmops"]["final_evaluation"] = final_evaluation
+    working["llmops"]["final_score"] = final_score
+    working["llmops"]["stopping_reason"] = stopping_reason
+    working["llmops"]["final_evaluation"] = final_evaluation
 
-    trace["final_score"] = best_score
+    trace["final_score"] = final_score
     trace["stopping_reason"] = stopping_reason
     trace["final_evaluation"] = final_evaluation
-    trace["output_preview"] = output_preview(best_profile)
+    trace["output_preview"] = output_preview(working)
     trace["request_events"] = request_events
-    logger.info("agent run done final_score=%s stopping_reason=%s iterations=%s errors=%s", best_score, stopping_reason, len(trace["iterations"]), len(errors))
-    return best_profile, trace, errors
+    trace["good_examples"] = good_examples_to_store
+    logger.info("agent run done final_score=%s tasks=%s good_examples=%s errors=%s", final_score, len(trace["task_traces"]), len(good_examples_to_store), len(errors))
+    return working, trace, errors

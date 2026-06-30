@@ -20,7 +20,7 @@ The implementation supports:
 - Structured resume projects with title, date, tech stack, links, and evidence bullets
 - Deterministic multilingual-ish section normalization with aliases/fuzzy rules
 - Optional Gemini section mapping for ambiguous headings, with confidence shown in the UI
-- Optional bounded agent evaluator loop with task decomposition, evaluator scoring, safe refinement, and SQLite memory examples
+- Optional per-task ReACT-style agent loop with task decomposition, evaluator scoring, safe refinement, visible traces, and SQLite good-example memory
 - Optional OpenRouter LLM extraction for messy text
 - Mandatory profile summary generation through OpenRouter when a key is configured, with local fallback only if a key is unavailable
 - Optional Hugging Face embedding matching for semantic skill canonicalization
@@ -133,7 +133,7 @@ AGENT_MAX_LOOPS=3
 LOG_LEVEL=INFO
 ```
 
-The agent evaluator runs after deterministic extraction and merge. It loads compact good/bad examples from SQLite, decomposes the quality check into smaller tasks, scores the candidate profile, and only applies safe refinements such as a better supported summary or evidence-backed skills.
+The agent evaluator runs after deterministic extraction and merge. It loads compact good examples from SQLite, decomposes the quality check into smaller deterministic/ReACT tasks, runs evaluator scoring inside each ReACT loop, and only applies LLM output when the task score is at least `8`. Failed LLM outputs are discarded. The UI shows task mode, loop count, prompts, evaluator prompts, intermediate steps, scores, stopping reason, and Gemini key index metadata.
 
 Optional semantic skill matching:
 
