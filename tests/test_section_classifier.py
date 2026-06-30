@@ -40,7 +40,7 @@ def test_similar_section_names_map_to_canonical_sections():
         ("Technical Strengths", "skills"),
         ("Selected Project Work", "projects"),
         ("Achievements and Recognition", "achievements"),
-        ("Competitive Programming Metadata", "competitive_programming"),
+        ("Online Coding Profile Metadata", "online_coding_profile"),
     ]
 
     for line, section in cases:

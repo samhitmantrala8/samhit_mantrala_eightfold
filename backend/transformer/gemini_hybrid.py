@@ -6,14 +6,18 @@ import os
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import requests
+from dotenv import load_dotenv
 
 from backend.transformer.section_classifier import CANONICAL_SECTION_LABELS, classify_line
 
 
 logger = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT / ".env", override=False)
 
 GEMINI_SECTION_SCHEMA = {
     "type": "object",
@@ -34,7 +38,7 @@ GEMINI_SECTION_SCHEMA = {
                             "projects",
                             "achievements",
                             "links",
-                            "competitive_programming",
+                            "online_coding_profile",
                             "certifications",
                             "extracurriculars",
                             "none",
@@ -65,7 +69,7 @@ Rules:
 - canonical_section is the section represented by the line if kind=section; otherwise use "none".
 - Skills such as React, ReAct Agent, Machine Learning, RAG, Python, and Project Management are content, not section headings.
 - Recognize multilingual or transliterated headings, including Spanish, French, German, Hindi/Indian-English variants, and mixed English headings.
-- Use only these canonical sections: education, experience, skills, projects, achievements, links, competitive_programming, certifications, extracurriculars.
+- Use only these canonical sections: education, experience, skills, projects, achievements, links, online_coding_profile, certifications, extracurriculars.
 - Be conservative. If unsure whether a line itself is a heading, use ambiguous with canonical_section="none".
 - Do not invent information that is not present in the line or its nearby context."""
 

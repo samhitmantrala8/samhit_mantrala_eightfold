@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from collections import defaultdict
 from typing import Any
 
@@ -35,20 +33,6 @@ def best_fact(facts: list[ExtractedFact]) -> ExtractedFact | None:
     return sorted(facts, key=lambda item: (score(item), len(str(item.value))), reverse=True)[0]
 
 
-def stable_candidate_id(profile: dict[str, Any]) -> str:
-    seed = None
-    if profile["emails"]:
-        seed = profile["emails"][0]
-    elif profile["phones"]:
-        seed = profile["phones"][0]
-    elif profile["full_name"]:
-        seed = profile["full_name"]
-    else:
-        seed = json.dumps(profile.get("links", {}), sort_keys=True)
-    digest = hashlib.sha256(seed.lower().encode("utf-8")).hexdigest()[:12]
-    return f"cand_{digest}"
-
-
 def provenance_entry(fact: ExtractedFact) -> dict[str, Any]:
     entry = {
         "field": fact.field,
@@ -67,7 +51,6 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         by_field[fact.field].append(fact)
 
     profile: dict[str, Any] = {
-        "candidate_id": "",
         "full_name": None,
         "emails": [],
         "phones": [],
@@ -80,6 +63,14 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         "education": [],
         "projects": [],
         "achievements": [],
+        "certifications": [],
+        "publications": [],
+        "online_coding_profile": {},
+        "github_repositories": [],
+        "languages": [],
+        "extracurriculars": [],
+        "other_sections": [],
+        "others": [],
         "profile_summary": None,
         "resume_sections": {},
         "provenance": [],
@@ -169,7 +160,18 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
     for group in project_groups.values():
         winner = best_fact(group)
         if winner and isinstance(winner.value, dict):
-            profile["projects"].append(clean_dict(winner.value, ["title", "date", "tech_stack", "links", "bullets"]))
+            project = clean_dict(winner.value, ["title", "date", "tech_stack", "links", "bullets"])
+            profile["projects"].append(project)
+            if winner.source.startswith("github:") or "#repo:" in winner.source:
+                repo = {
+                    "name": project.get("title"),
+                    "date": project.get("date"),
+                    "tech_stack": project.get("tech_stack") or [],
+                    "links": project.get("links") or [],
+                    "bullets": project.get("bullets") or [],
+                    "source": winner.source,
+                }
+                profile["github_repositories"].append(repo)
 
     achievement_groups: dict[str, list[ExtractedFact]] = defaultdict(list)
     for fact in by_field["achievements"]:
@@ -183,12 +185,39 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
         if winner and isinstance(winner.value, dict):
             profile["achievements"].append(clean_dict(winner.value, ["title", "summary", "links"]))
 
-    accepted_fields = {"full_name", "headline", "years_experience", "emails", "phones", "skills", "experience", "education", "projects", "achievements"}
+    other_groups: dict[str, list[ExtractedFact]] = defaultdict(list)
+    for fact in by_field["others"]:
+        if not isinstance(fact.value, dict):
+            continue
+        title = (fact.value.get("title") or fact.evidence or fact.source or "Other").strip()
+        other_groups[title.lower()].append(fact)
+    for group in other_groups.values():
+        winner = best_fact(group)
+        if winner and isinstance(winner.value, dict):
+            profile["others"].append(clean_dict(winner.value, ["title", "content", "source"]))
+
+    competitive_winner = best_fact(by_field["online_coding_profile"])
+    if competitive_winner and isinstance(competitive_winner.value, dict):
+        profile["online_coding_profile"] = competitive_winner.value
+
+    accepted_fields = {
+        "full_name",
+        "headline",
+        "years_experience",
+        "emails",
+        "phones",
+        "skills",
+        "experience",
+        "education",
+        "projects",
+        "achievements",
+        "online_coding_profile",
+        "others",
+    }
     accepted_fields.update({f"location.{key}" for key in ("city", "region", "country")})
     accepted_fields.update({"links.github", "links.linkedin", "links.portfolio", "links.other"})
     profile["provenance"] = [provenance_entry(fact) for fact in facts if fact.field in accepted_fields]
 
-    profile["candidate_id"] = stable_candidate_id(profile)
     confidence_components = []
     for field in ("full_name", "emails", "phones", "headline"):
         field_facts = by_field[field]

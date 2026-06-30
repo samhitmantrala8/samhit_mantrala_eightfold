@@ -53,7 +53,6 @@ def test_bad_or_sparse_source_degrades_gracefully():
     profile = result["default_profile"]
 
     assert result["validation_errors"] == []
-    assert profile["candidate_id"].startswith("cand_")
     assert profile["full_name"] is None
     assert profile["emails"] == []
 
@@ -262,3 +261,84 @@ def test_fuzzy_csv_headers_extract_expected_fields(tmp_path):
     assert profile["links"]["github"] == "https://github.com/example"
     assert "https://codeforces.com/profile/CinCout21" in profile["links"]["other"]
     assert {"Python", "React", "MongoDB"} <= skill_names
+
+
+def test_messy_json_aliases_extract_expected_fields(tmp_path):
+    ats_file = tmp_path / "messy_profile.json"
+    ats_file.write_text(
+        json.dumps(
+            {
+                "candidate_full_name": "JSON Candidate",
+                "contact_details": {
+                    "email_id": "json@example.com",
+                    "mobile_number": "+91 98765 43210",
+                    "github_profile": "github.com/json-user",
+                    "linkedin_url": "linkedin.com/in/json-user",
+                },
+                "academic_history": [
+                    {
+                        "instituteName": "Example University",
+                        "qualification": "B.Tech",
+                        "specialization": "Computer Science",
+                        "graduationYear": 2026,
+                        "gpa": "8.7/10",
+                    }
+                ],
+                "work_experience": [
+                    {
+                        "employer": "ExampleCo",
+                        "designation": "AI Intern",
+                        "date_range": "Jan 2026 - Present",
+                        "city": "Pune, India",
+                        "description": "Built Flask APIs with Python.",
+                    }
+                ],
+                "technical_skills": "Python, Flask, ReactJS, MongoDB",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    profile = transform_paths([ats_file], default_region="IN")["default_profile"]
+    skill_names = {skill["name"] for skill in profile["skills"]}
+
+    assert profile["full_name"] == "JSON Candidate"
+    assert profile["emails"] == ["json@example.com"]
+    assert profile["phones"] == ["+919876543210"]
+    assert profile["links"]["github"] == "https://github.com/json-user"
+    assert profile["links"]["linkedin"] == "https://linkedin.com/in/json-user"
+    assert profile["education"][0]["institution"] == "Example University"
+    assert profile["education"][0]["cgpa"] == "8.7/10"
+    assert profile["experience"][0]["company"] == "ExampleCo"
+    assert profile["experience"][0]["title"] == "AI Intern"
+    assert {"Python", "Flask", "React", "MongoDB"} <= skill_names
+
+
+def test_flat_json_college_maps_to_education(tmp_path):
+    source = tmp_path / "person_details.json"
+    source.write_text(
+        json.dumps(
+            {
+                "person name": "samhit mantrala",
+                "mobile number": "+91-7225971349",
+                "college": "IIIT Jabalpur",
+                "degree": "Bachelor of Technology",
+                "branch": "Computer Science and Engineering",
+                "cgpa": "8.5/10",
+                "company": "MindTickle",
+                "role": "SDE (Applied AI) Intern",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    profile = transform_paths([source], default_region="IN")["default_profile"]
+
+    assert profile["full_name"] == "samhit mantrala"
+    assert profile["phones"] == ["+917225971349"]
+    assert profile["education"][0]["institution"] == "IIIT Jabalpur"
+    assert profile["education"][0]["degree"] == "Bachelor of Technology"
+    assert profile["education"][0]["field"] == "Computer Science and Engineering"
+    assert profile["education"][0]["cgpa"] == "8.5/10"
+    assert profile["experience"][0]["company"] == "MindTickle"
+    assert profile["experience"][0]["role"] == "SDE (Applied AI) Intern"

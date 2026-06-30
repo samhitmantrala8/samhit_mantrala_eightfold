@@ -57,6 +57,24 @@ def extract_codeforces(handle: str) -> ExtractionBundle:
         parts.append(f"max rank {max_rank}")
     facts.append(
         ExtractedFact(
+            "online_coding_profile",
+            {
+                "codeforces": {
+                    "handle": handle,
+                    "profile_url": f"https://codeforces.com/profile/{handle}",
+                    "rating": rating,
+                    "rank": rank,
+                    "max_rating": max_rating,
+                    "max_rank": max_rank,
+                }
+            },
+            source,
+            "codeforces-api:user.info",
+            0.74,
+        )
+    )
+    facts.append(
+        ExtractedFact(
             "achievements",
             {
                 "title": "Codeforces Profile",

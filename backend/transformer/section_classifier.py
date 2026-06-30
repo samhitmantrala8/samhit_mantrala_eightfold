@@ -58,9 +58,9 @@ SECTION_ALIASES = {
         "online profiles",
         "social links",
     ],
-    "competitive_programming": [
-        "competitive programming",
-        "competitive programming metadata",
+    "online_coding_profile": [
+        "Online Coding Profile",
+        "Online Coding Profile metadata",
         "coding profiles",
         "programming profiles",
     ],
@@ -84,7 +84,7 @@ CANONICAL_SECTION_LABELS = {
     "projects": "Projects",
     "achievements": "Achievements",
     "links": "Links",
-    "competitive_programming": "Competitive Programming",
+    "online_coding_profile": "Online Coding Profile",
     "certifications": "Certifications",
     "extracurriculars": "Extracurriculars",
 }
@@ -167,7 +167,7 @@ def following_context_score(section: str | None, next_lines: list[str]) -> tuple
     if section == "achievements" and re.search(r"\b(challenge|cup|rank|secured|award|top)\b", joined, re.IGNORECASE):
         score += 0.18
         reasons.append("following lines look like achievements")
-    if section == "competitive_programming" and re.search(r"\b(codeforces|leetcode|kaggle|handle|rating)\b", joined, re.IGNORECASE):
+    if section == "online_coding_profile" and re.search(r"\b(codeforces|leetcode|kaggle|handle|rating)\b", joined, re.IGNORECASE):
         score += 0.18
         reasons.append("following lines contain coding profile terms")
     if section == "links" and CONTACT_RE.search(joined):

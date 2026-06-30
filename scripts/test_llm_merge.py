@@ -26,7 +26,7 @@ Keep React, the frontend library, separate from ReAct Agents, the agentic AI pat
 
 SECTION_SYSTEM_PROMPT = """You normalize candidate resume section names.
 Return exactly one valid JSON object with only this top-level key: canonical_sections.
-Use only these canonical section keys: education, experience, skills, projects, achievements, links, competitive_programming, other.
+Use only these canonical section keys: education, experience, skills, projects, achievements, links, online_coding_profile, other.
 Merge duplicate or similar section headings. Use only facts present in the input."""
 
 SKILL_SYSTEM_PROMPT = """You normalize candidate skills and aliases.
@@ -84,7 +84,7 @@ Achievements and Recognition
 - Codeforces Expert rating 1630, handle CinCout21.
 - LeetCode rating 2043, handle clutchnuub21.
 
-Competitive Programming Metadata
+Online Coding Profile Metadata
 - CF handle: CinCout21. LC handle: clutchnuub21. Kaggle profile: samhitmantrala.
 """.strip()
 
@@ -107,7 +107,7 @@ Selected Project Work
 - Same projects appear again under different names.
 Achievements and Recognition
 - Amazon ML Challenge, Meta Hacker Cup, Codeforces, LeetCode.
-Competitive Programming Metadata
+Online Coding Profile Metadata
 - CF handle, LC handle, Kaggle profile.
 """.strip()
 
@@ -126,7 +126,7 @@ Projects / Applied Builds
 - AnonGrievance: ExpressJS, NodeJS, MongoDB TTL indexes, pagination, abusive text moderation, BERT fine tuning, dark and light themes.
 """.strip()
 
-EXPECTED_SECTIONS = {"education", "experience", "skills", "projects", "achievements", "links", "competitive_programming"}
+EXPECTED_SECTIONS = {"education", "experience", "skills", "projects", "achievements", "links", "online_coding_profile"}
 EXPECTED_SKILLS = {
     "Python",
     "Go",
@@ -172,7 +172,7 @@ def build_combined_prompt() -> dict[str, Any]:
                 "projects": ["short merged facts"],
                 "achievements": ["short merged facts"],
                 "links": ["short merged facts"],
-                "competitive_programming": ["short merged facts"],
+                "online_coding_profile": ["short merged facts"],
                 "other": ["short merged facts"],
             },
             "normalized_skills": [
@@ -207,7 +207,7 @@ def build_section_prompt() -> dict[str, Any]:
                 "projects": ["short merged facts"],
                 "achievements": ["short merged facts"],
                 "links": ["short merged facts"],
-                "competitive_programming": ["short merged facts"],
+                "online_coding_profile": ["short merged facts"],
                 "other": ["short merged facts"],
             }
         },
@@ -217,7 +217,7 @@ def build_section_prompt() -> dict[str, Any]:
             "Technical Strengths and Tools and Platforms map to skills.",
             "Projects / Applied Builds and Selected Project Work map to projects.",
             "Achievements and Recognition maps to achievements.",
-            "Competitive Programming Metadata maps to competitive_programming.",
+            "Online Coding Profile Metadata maps to online_coding_profile.",
         ],
         "candidate_text": SECTION_SOURCE_TEXT,
     }

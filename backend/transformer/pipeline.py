@@ -25,6 +25,20 @@ from backend.transformer.validation import validate_default_profile
 
 
 logger = logging.getLogger(__name__)
+KNOWN_RESUME_SECTION_LABELS = {
+    "Education",
+    "Experience",
+    "Professional Background",
+    "Projects",
+    "Skills",
+    "Skills Summary",
+    "Achievements",
+    "Online Coding Profile",
+    "Certifications",
+    "Publications",
+    "Extracurriculars",
+    "Links",
+}
 
 
 def extract_from_path(path: Path, use_llm: bool = False) -> ExtractionBundle:
@@ -46,7 +60,7 @@ def extract_from_path(path: Path, use_llm: bool = False) -> ExtractionBundle:
 
 def text_from_path(path: Path) -> str | None:
     logger.info("text_from_path start file=%s suffix=%s", path.name, path.suffix.lower())
-    if path.suffix.lower() in {".txt", ".md"}:
+    if path.suffix.lower() in {".txt", ".md", ".json"}:
         try:
             text = path.read_text(encoding="utf-8")
             logger.info("text_from_path done file=%s chars=%s encoding=utf-8", path.name, len(text))
@@ -148,6 +162,7 @@ def transform_paths(
     extraction_errors: list[str] = []
     source_texts: list[str] = []
     semantic_mappings: list[dict] = []
+    agent_diagnostics: dict | None = None
 
     for path in paths:
         path_started = time.perf_counter()
@@ -159,7 +174,7 @@ def transform_paths(
         source_text = text_from_path(path)
         if source_text:
             source = f"{path.suffix.lower().lstrip('.') or 'text'}:{path.name}"
-            if use_gemini_hybrid:
+            if use_gemini_hybrid and path.suffix.lower() in {".txt", ".md", ".pdf"}:
                 logger.info("gemini semantic mapping start source=%s chars=%s", source, len(source_text))
                 source_text, mappings, gemini_errors = canonicalize_section_headings(source_text, source)
                 semantic_mappings.extend(mappings)
@@ -241,8 +256,8 @@ def transform_paths(
     logger.info("merge_facts start normalized_facts=%s extraction_errors=%s", len(normalized_facts), len(extraction_errors))
     default_profile = merge_facts(normalized_facts, extraction_errors)
     logger.info(
-        "merge_facts done candidate_id=%s skills=%s education=%s experience=%s projects=%s achievements=%s provenance=%s",
-        default_profile.get("candidate_id"),
+        "merge_facts done full_name=%s skills=%s education=%s experience=%s projects=%s achievements=%s provenance=%s",
+        default_profile.get("full_name"),
         len(default_profile.get("skills", [])),
         len(default_profile.get("education", [])),
         len(default_profile.get("experience", [])),
@@ -253,6 +268,18 @@ def transform_paths(
     logger.info("resume section extraction start source_texts=%s", len(source_texts))
     default_profile["resume_sections"] = extract_resume_sections(source_texts)
     logger.info("resume section extraction done sections=%s", list(default_profile["resume_sections"].keys()))
+    default_profile["other_sections"] = [
+        {"title": name, "content": body}
+        for name, body in default_profile["resume_sections"].items()
+        if name not in KNOWN_RESUME_SECTION_LABELS
+    ]
+    if default_profile["other_sections"]:
+        existing_other_titles = {str(item.get("title", "")).lower() for item in default_profile.get("others", []) if isinstance(item, dict)}
+        for item in default_profile["other_sections"]:
+            title = str(item.get("title", ""))
+            if title.lower() not in existing_other_titles:
+                default_profile.setdefault("others", []).append({**item, "source": "resume_sections"})
+    logger.info("other sections populated count=%s", len(default_profile["other_sections"]))
     default_profile["semantic_mappings"] = semantic_mappings
     logger.info("profile summary generation start source_texts=%s", len(source_texts))
     summary, summary_meta, summary_errors = generate_profile_summary(default_profile, source_texts)
@@ -274,7 +301,7 @@ def transform_paths(
         pre_agent_validation_errors = validate_default_profile(default_profile)
         logger.info("agentic llmops pre-validation errors=%s", len(pre_agent_validation_errors))
         try:
-            examples = recent_llmops_examples()
+            examples = recent_llmops_examples(limit=100)
             logger.info("agentic llmops memory loaded examples=%s", len(examples))
         except Exception as exc:
             examples = []
@@ -285,8 +312,10 @@ def transform_paths(
             source_texts,
             validation_errors=pre_agent_validation_errors,
             memory_examples=examples,
+            default_region=default_region,
         )
         extraction_errors.extend(llmops_errors)
+        agent_diagnostics = llmops_trace
         logger.info(
             "agentic llmops done final_score=%s stopping_reason=%s errors=%s",
             llmops_trace.get("final_score"),
@@ -295,11 +324,12 @@ def transform_paths(
         )
         try:
             trace_id = record_llmops_trace(llmops_trace)
-            default_profile.setdefault("llmops", {})["trace_id"] = trace_id
+            agent_diagnostics["trace_id"] = trace_id
             logger.info("agentic llmops trace stored trace_id=%s", trace_id)
         except Exception as exc:
             extraction_errors.append(f"llmops_agent: failed to store trace: {exc}")
             logger.exception("agentic llmops trace store failed")
+        default_profile.pop("llmops", None)
 
     default_profile["extraction_errors"] = extraction_errors
     logger.info("validation start")
@@ -312,6 +342,7 @@ def transform_paths(
 
     return {
         "default_profile": default_profile,
+        "agent_diagnostics": agent_diagnostics,
         "custom_output": custom_output if config else None,
         "extraction_errors": extraction_errors,
         "validation_errors": validation_errors + projection_errors,

@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from backend.history import recent_llmops_examples, recent_llmops_traces, recent_transforms, record_transform, transform_by_id
+from backend.transformer.gemini_hybrid import configured_gemini_keys
 from backend.transformer.pipeline import transform_paths
 
 
@@ -68,9 +69,10 @@ def create_app() -> Flask:
         linkedin_url = request.form.get("linkedin_url") or None
         config_text = request.form.get("config") or ""
         default_region = request.form.get("default_region") or os.getenv("DEFAULT_PHONE_REGION", "US")
-        use_llm = (request.form.get("use_llm") or "").lower() in {"1", "true", "yes"}
-        use_gemini_hybrid = (request.form.get("use_gemini_hybrid") or os.getenv("USE_GEMINI_HYBRID", "")).lower() in {"1", "true", "yes"}
-        use_agentic_llmops = (request.form.get("use_agentic_llmops") or os.getenv("USE_AGENTIC_LLMOPS", "")).lower() in {"1", "true", "yes"}
+        use_llm = (request.form.get("use_llm") or os.getenv("USE_LLM_EXTRACTOR", "")).lower() in {"1", "true", "yes"}
+        has_gemini_keys = bool(configured_gemini_keys())
+        use_gemini_hybrid = has_gemini_keys and (request.form.get("use_gemini_hybrid") or os.getenv("USE_GEMINI_HYBRID", "true")).lower() in {"1", "true", "yes", "auto"}
+        use_agentic_llmops = (request.form.get("use_agentic_llmops") or os.getenv("USE_AGENTIC_LLMOPS", "true")).lower() in {"1", "true", "yes", "auto"}
         logger.info(
             "[%s] flags default_region=%s use_llm=%s use_gemini_hybrid=%s use_agentic_llmops=%s github_url=%s linkedin_url=%s config=%s",
             request_id,
@@ -142,4 +144,4 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5055")), debug=True)

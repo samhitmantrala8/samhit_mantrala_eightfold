@@ -22,7 +22,6 @@ def connect() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS transformations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,
-            candidate_id TEXT,
             full_name TEXT,
             source_count INTEGER NOT NULL,
             result_json TEXT NOT NULL
@@ -77,12 +76,11 @@ def record_transform(result: dict[str, Any], source_count: int) -> int:
     with connect() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO transformations (created_at, candidate_id, full_name, source_count, result_json)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO transformations (created_at, full_name, source_count, result_json)
+            VALUES (?, ?, ?, ?)
             """,
             (
                 datetime.now(timezone.utc).isoformat(),
-                profile.get("candidate_id"),
                 profile.get("full_name"),
                 source_count,
                 payload,
@@ -90,9 +88,8 @@ def record_transform(result: dict[str, Any], source_count: int) -> int:
         )
         transform_id = int(cursor.lastrowid)
         logger.info(
-            "history record_transform id=%s candidate_id=%s full_name=%s source_count=%s",
+            "history record_transform id=%s full_name=%s source_count=%s",
             transform_id,
-            profile.get("candidate_id"),
             profile.get("full_name"),
             source_count,
         )
@@ -104,7 +101,7 @@ def recent_transforms(limit: int = 20) -> list[dict[str, Any]]:
     with connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, created_at, candidate_id, full_name, source_count
+            SELECT id, created_at, full_name, source_count
             FROM transformations
             ORDER BY id DESC
             LIMIT ?
@@ -122,6 +119,41 @@ def transform_by_id(transform_id: int) -> dict[str, Any] | None:
             (transform_id,),
         ).fetchone()
     return json.loads(row["result_json"]) if row else None
+
+
+def _cleanup_llmops_examples(connection: sqlite3.Connection, max_per_task: int = 5) -> None:
+    logger.info("history cleanup_llmops_examples start max_per_task=%s", max_per_task)
+    removed_bad = connection.execute(
+        "DELETE FROM llmops_examples WHERE quality != 'good' OR score < 8.0"
+    ).rowcount
+    rows = connection.execute(
+        """
+        SELECT id, task_type
+        FROM llmops_examples
+        ORDER BY task_type ASC, score DESC, id DESC
+        """
+    ).fetchall()
+    seen: dict[str, int] = {}
+    remove_ids: list[int] = []
+    for row in rows:
+        task_type = row["task_type"]
+        seen[task_type] = seen.get(task_type, 0) + 1
+        if seen[task_type] > max_per_task:
+            remove_ids.append(int(row["id"]))
+    if remove_ids:
+        placeholders = ",".join("?" for _ in remove_ids)
+        connection.execute(f"DELETE FROM llmops_examples WHERE id IN ({placeholders})", remove_ids)
+    logger.info(
+        "history cleanup_llmops_examples done removed_bad=%s removed_overflow=%s task_types=%s",
+        removed_bad,
+        len(remove_ids),
+        len(seen),
+    )
+
+
+def cleanup_llmops_examples(max_per_task: int = 5) -> None:
+    with connect() as connection:
+        _cleanup_llmops_examples(connection, max_per_task)
 
 
 def record_llmops_trace(trace: dict[str, Any]) -> int:
@@ -157,16 +189,6 @@ def record_llmops_trace(trace: dict[str, Any]) -> int:
             for example in trace.get("good_examples", [])
             if float(example.get("score") or 0.0) >= 8.0
         ]
-        if not good_examples and score >= 8.0:
-            good_examples = [
-                {
-                    "task_type": task_type,
-                    "score": score,
-                    "input": trace.get("input_excerpt") or {},
-                    "output": trace.get("output_preview") or {},
-                    "evaluation": trace.get("final_evaluation") or {},
-                }
-            ]
         for example in good_examples:
             example_task_type = str(example.get("task_type") or task_type)
             example_score = float(example.get("score") or score)
@@ -195,6 +217,7 @@ def record_llmops_trace(trace: dict[str, Any]) -> int:
             )
         trace_id = int(cursor.lastrowid)
         logger.info("history record_llmops_trace id=%s task_type=%s quality=%s score=%s good_examples=%s", trace_id, task_type, quality, score, len(good_examples))
+        _cleanup_llmops_examples(connection)
         return trace_id
 
 
@@ -208,7 +231,7 @@ def recent_llmops_examples(task_type: str = "candidate_profile_agent", limit: in
                    example_input_json, example_output_json
             FROM llmops_examples
             WHERE task_type LIKE ? AND quality = 'good' AND score >= 8.0
-            ORDER BY id DESC
+            ORDER BY score DESC, id DESC
             LIMIT ?
             """,
             (f"{task_type}%", limit),

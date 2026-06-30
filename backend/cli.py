@@ -16,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--github-url", help="Optional GitHub profile URL.")
     parser.add_argument("--linkedin-url", help="Optional LinkedIn profile URL.")
     parser.add_argument("--default-region", default="US", help="Default region for local phone numbers.")
-    parser.add_argument("--use-llm", action="store_true", help="Enable optional OpenRouter text extraction.")
+    parser.add_argument("--use-llm", action="store_true", help="Enable optional legacy LLM text extraction.")
     parser.add_argument("--out", help="Write the full result bundle to this JSON file.")
     return parser
 

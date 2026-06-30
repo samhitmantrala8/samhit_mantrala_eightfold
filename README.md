@@ -21,8 +21,8 @@ The implementation supports:
 - Deterministic multilingual-ish section normalization with aliases/fuzzy rules
 - Optional Gemini section mapping for ambiguous headings, with confidence shown in the UI
 - Optional per-task ReACT-style agent loop with task decomposition, evaluator scoring, safe refinement, visible traces, and SQLite good-example memory
-- Optional OpenRouter LLM extraction for messy text
-- Mandatory profile summary generation through OpenRouter when a key is configured, with local fallback only if a key is unavailable
+- Optional Gemini-assisted section mapping and field repair for ambiguous inputs
+- Mandatory profile summary generation through Gemini when a key is configured, with local fallback only if a key is unavailable
 - Optional Hugging Face embedding matching for semantic skill canonicalization
 
 LLM and embedding helpers are deliberately optional. The transformer still runs end-to-end without network keys.
@@ -109,16 +109,6 @@ The tests cover default schema output, custom projection, phone normalization, s
 Do not commit a real key. Add it to `.env`:
 
 ```env
-OPENROUTER_KEYS=key_one,key_two,key_three
-USE_LLM_EXTRACTOR=true
-OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
-```
-
-The LLM extractor asks for strict JSON with evidence spans and uses temperature `0`. LLM output is validated, normalized, and merged by the deterministic engine before it can affect the final profile.
-
-Optional Gemini hybrid and agent evaluator:
-
-```env
 gem1=your_gemini_key_1
 gem2=your_gemini_key_2
 gem3=your_gemini_key_3
@@ -132,6 +122,8 @@ AGENT_SCORE_THRESHOLD=8.5
 AGENT_MAX_LOOPS=3
 LOG_LEVEL=INFO
 ```
+
+The Gemini hybrid and agent evaluator use strict JSON schemas, temperature `0`, per-field prompts, evaluator scoring, and deterministic normalization before any generated value can affect the final profile.
 
 The agent evaluator runs after deterministic extraction and merge. It loads compact good examples from SQLite, decomposes the quality check into smaller deterministic/ReACT tasks, runs evaluator scoring inside each ReACT loop, and only applies LLM output when the task score is at least `8`. Failed LLM outputs are discarded. The UI shows task mode, loop count, prompts, evaluator prompts, intermediate steps, scores, stopping reason, and Gemini key index metadata.
 

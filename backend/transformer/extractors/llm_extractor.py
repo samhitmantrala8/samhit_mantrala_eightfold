@@ -39,7 +39,7 @@ def extract_text_with_llm(text: str, source: str) -> ExtractionBundle:
 
     keys = configured_keys()
     if not keys:
-        return ExtractionBundle([], ["llm: enabled but no OpenRouter key configured"])
+        return ExtractionBundle([], ["llm: enabled but no legacy LLM key configured"])
 
     model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
     user_prompt = {

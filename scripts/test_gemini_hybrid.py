@@ -46,7 +46,7 @@ SECTION_SCHEMA = {
                             "projects",
                             "achievements",
                             "links",
-                            "competitive_programming",
+                            "online_coding_profile",
                             "certifications",
                             "extracurriculars",
                             "none",
@@ -105,7 +105,7 @@ Decision rules:
 - canonical_section is the section heading represented by the line if kind=section, otherwise "none".
 - Skills such as React, ReAct Agent, Machine Learning, RAG, Python, and Project Management are content, not section headings.
 - Recognize multilingual section headings, including Spanish, French, German, Hindi transliterations, and mixed English headings.
-- Use only these canonical sections: education, experience, skills, projects, achievements, links, competitive_programming, certifications, extracurriculars.
+- Use only these canonical sections: education, experience, skills, projects, achievements, links, online_coding_profile, certifications, extracurriculars.
 - Be conservative. If unsure whether a line itself is a heading, use ambiguous with canonical_section="none"."""
 
 SKILL_SYSTEM_PROMPT = """You are a deterministic skill alias normalizer for candidate profiles.

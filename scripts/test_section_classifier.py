@@ -70,10 +70,10 @@ CASES = [
         "expected_section": "achievements",
     },
     {
-        "line": "Competitive Programming Metadata",
+        "line": "Online Coding Profile Metadata",
         "next_lines": ["CF handle: CinCout21. LC handle: clutchnuub21."],
         "expected_kind": "section",
-        "expected_section": "competitive_programming",
+        "expected_section": "online_coding_profile",
     },
     {
         "line": "React",
@@ -117,7 +117,7 @@ LLM_SYSTEM_PROMPT = """Classify resume lines.
 Return exactly one JSON object with key "items".
 For each input item, return: id, kind, canonical_section, reason.
 kind must be one of: section, content, ambiguous.
-canonical_section must be one of: education, experience, skills, projects, achievements, links, competitive_programming, certifications, extracurriculars, null.
+canonical_section must be one of: education, experience, skills, projects, achievements, links, online_coding_profile, certifications, extracurriculars, null.
 Do not classify skill names like React, Machine Learning, RAG, or ReAct Agent as section headings."""
 
 

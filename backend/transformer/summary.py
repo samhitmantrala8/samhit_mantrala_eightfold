@@ -7,8 +7,8 @@ from typing import Any
 
 import requests
 
-from backend.transformer.extractors.llm_extractor import configured_keys
 from backend.transformer.extractors.notes_extractor import grouped_section_lines
+from backend.transformer.gemini_hybrid import configured_gemini_keys, next_gemini_key
 from backend.transformer.section_classifier import CANONICAL_SECTION_LABELS
 
 
@@ -112,8 +112,8 @@ def deterministic_summary(profile: dict[str, Any], source_texts: list[str]) -> s
 
 
 def generate_profile_summary(profile: dict[str, Any], source_texts: list[str]) -> tuple[str, dict[str, Any], list[str]]:
-    keys = configured_keys()
-    model = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+    keys = configured_gemini_keys()
+    model = os.getenv("GEMINI_SUMMARY_MODEL") or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     context = summary_context(profile, source_texts)
     prompt = {
         "instruction": (
@@ -126,38 +126,31 @@ def generate_profile_summary(profile: dict[str, Any], source_texts: list[str]) -
 
     errors: list[str] = []
     if keys:
-        for key in keys:
+        for _attempt in range(len(keys)):
+            key_position, key = next_gemini_key(keys)
             try:
                 response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {key}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "http://localhost:5177",
-                        "X-Title": "Eightfold Candidate Transformer",
-                    },
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                     json={
-                        "model": model,
-                        "temperature": 0,
-                        "messages": [
-                            {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                            {"role": "user", "content": json.dumps(prompt)},
-                        ],
+                        "systemInstruction": {"parts": [{"text": SUMMARY_SYSTEM_PROMPT}]},
+                        "contents": [{"role": "user", "parts": [{"text": json.dumps(prompt, ensure_ascii=False)}]}],
+                        "generationConfig": {"temperature": 0, "topP": 1, "topK": 1, "maxOutputTokens": 512},
                     },
                     timeout=25,
                 )
                 if response.status_code in {429, 402, 403}:
-                    errors.append(f"profile_summary: OpenRouter returned status {response.status_code}")
+                    errors.append(f"profile_summary: Gemini key {key_position} returned status {response.status_code}")
                     continue
                 response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"].strip()
+                content = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                 content = re.sub(r"\s+", " ", content)
                 if content:
-                    return content, {"source": "openrouter", "method": "llm-profile-summary", "confidence": 0.72}, errors
+                    return content, {"source": "gemini", "method": "gemini-profile-summary", "confidence": 0.72}, errors
             except Exception as exc:
-                errors.append(f"profile_summary: LLM summary failed: {exc}")
+                errors.append(f"profile_summary: Gemini summary failed: {exc}")
 
     fallback = deterministic_summary(profile, source_texts)
     if not keys:
-        errors.append("profile_summary: OpenRouter keys not configured; used deterministic fallback")
+        errors.append("profile_summary: Gemini keys not configured; used deterministic fallback")
     return fallback, {"source": "local-fallback", "method": "deterministic-profile-summary", "confidence": 0.42}, errors

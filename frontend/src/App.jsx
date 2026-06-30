@@ -26,22 +26,46 @@ import {
   XCircle
 } from "lucide-react";
 
-const SAMPLE_CONFIG = `{
-  "fields": [
-    { "path": "full_name", "type": "string", "required": true },
-    { "path": "primary_email", "from": "emails[0]", "type": "string", "required": true },
-    { "path": "phone", "from": "phones[0]", "type": "string", "normalize": "E164" },
-    { "path": "github", "from": "links.github", "type": "string" },
-    { "path": "skills", "from": "skills[].name", "type": "string[]", "normalize": "canonical" }
-  ],
-  "include_confidence": true,
-  "include_provenance": false,
-  "on_missing": "null"
-}`;
-
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".json", ".txt", ".md", ".pdf"];
+const CUSTOM_FIELD_OPTIONS = [
+  { group: "Identity", label: "Full Name", path: "full_name", type: "string" },
+  { group: "Identity", label: "Headline", path: "headline", type: "string" },
+  { group: "Identity", label: "Years Experience", path: "years_experience", type: "number" },
+  { group: "Contact", label: "Emails", path: "emails", type: "string[]" },
+  { group: "Contact", label: "Phones", path: "phones", type: "string[]" },
+  { group: "Location", label: "Location", path: "location", type: "object" },
+  { group: "Location", label: "City", path: "location.city", type: "string" },
+  { group: "Location", label: "Region", path: "location.region", type: "string" },
+  { group: "Location", label: "Country", path: "location.country", type: "string" },
+  { group: "Links", label: "GitHub URL", path: "links.github", type: "string" },
+  { group: "Links", label: "LinkedIn URL", path: "links.linkedin", type: "string" },
+  { group: "Links", label: "Portfolio URL", path: "links.portfolio", type: "string" },
+  { group: "Links", label: "Other Links", path: "links.other", type: "string[]" },
+  { group: "Recruiting", label: "Education", path: "education", type: "object[]" },
+  { group: "Recruiting", label: "Experience", path: "experience", type: "object[]" },
+  { group: "Recruiting", label: "Projects", path: "projects", type: "object[]" },
+  { group: "Recruiting", label: "Skills", path: "skills", type: "object[]" },
+  { group: "Recruiting", label: "Achievements", path: "achievements", type: "object[]" },
+  { group: "Recruiting", label: "Certifications", path: "certifications" },
+  { group: "Recruiting", label: "Publications", path: "publications" },
+  { group: "Recruiting", label: "Online Coding Profile", path: "online_coding_profile", type: "object" },
+  { group: "Recruiting", label: "GitHub Repositories", path: "github_repositories", type: "object[]" },
+  { group: "Recruiting", label: "Languages", path: "languages" },
+  { group: "Recruiting", label: "Extracurriculars", path: "extracurriculars" },
+  { group: "Recruiting", label: "Profile Summary", path: "profile_summary", type: "string" },
+  { group: "Recruiting", label: "Other Sections", path: "other_sections", type: "object[]" },
+  { group: "Recruiting", label: "Others", path: "others", type: "object[]" },
+  { group: "Diagnostics", label: "Overall Confidence", path: "overall_confidence", type: "number" },
+  { group: "Diagnostics", label: "Provenance", path: "provenance", type: "object[]" },
+  { group: "Diagnostics", label: "Resume Sections", path: "resume_sections", type: "object" },
+  { group: "Diagnostics", label: "Semantic Mappings", path: "semantic_mappings", type: "object[]" },
+  { group: "Diagnostics", label: "Extraction Errors", path: "extraction_errors", type: "string[]" }
+];
+const DEFAULT_SELECTED_FIELDS = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, true]));
+const DEFAULT_FIELD_RENAMES = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, field.path]));
+const DEFAULT_KEEP_EMPTY_FIELDS = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, false]));
 
 function JsonPanel({ title, data }) {
   return (
@@ -146,6 +170,31 @@ function TextChips({ items = [] }) {
       ))}
     </div>
   );
+}
+
+function buildCustomConfig(selectedFields = {}, fieldRenames = {}, keepEmptyFields = {}) {
+  return {
+    fields: CUSTOM_FIELD_OPTIONS.filter((field) => selectedFields[field.path]).map((field) => {
+      const targetPath = (fieldRenames[field.path] || field.path).trim() || field.path;
+      const outputField = {
+        path: targetPath,
+        from: field.path,
+        on_missing: keepEmptyFields[field.path] ? "null" : "omit"
+      };
+      if (field.type) outputField.type = field.type;
+      if (field.required) outputField.required = true;
+      return outputField;
+    }),
+    on_missing: "omit"
+  };
+}
+
+function groupedCustomFields() {
+  return CUSTOM_FIELD_OPTIONS.reduce((groups, field) => {
+    if (!groups[field.group]) groups[field.group] = [];
+    groups[field.group].push(field);
+    return groups;
+  }, {});
 }
 
 function MergeTrust({ profile }) {
@@ -356,21 +405,35 @@ function AgentTraceModal({ trace, onClose }) {
   );
 }
 
-function AgentOps({ profile }) {
+function AgentOps({ diagnostics }) {
   const [selectedTrace, setSelectedTrace] = useState(null);
-  const llmops = profile?.llmops;
-  if (!llmops) return null;
+  const llmops = diagnostics;
+  if (!llmops) {
+    return (
+      <section className="rounded-lg border border-line bg-white">
+        <div className="border-b border-line px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Gauge size={16} />
+            Agent Traces
+          </div>
+        </div>
+        <div className="p-4 text-sm text-slate-600">No agent diagnostics returned for this transform.</div>
+      </section>
+    );
+  }
   const iterations = llmops.iterations || [];
   const events = llmops.request_events || [];
   const taskTraces = llmops.task_traces || [];
   const finalScore = Number(llmops.final_score || 0);
   return (
-    <div>
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <Gauge size={16} />
-        Agent Evaluation
+    <section className="rounded-lg border border-line bg-white">
+      <div className="border-b border-line px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Gauge size={16} />
+          Agent Traces
+        </div>
       </div>
-      <div className="space-y-3 rounded-md border border-line bg-slate-50 p-3">
+      <div className="space-y-3 p-4">
         <div className="grid gap-2 md:grid-cols-4">
           <div className={`rounded-md border px-3 py-2 ${scoreClass(finalScore)}`}>
             <div className="text-[11px] font-semibold uppercase tracking-normal">Score</div>
@@ -485,7 +548,7 @@ function AgentOps({ profile }) {
         )}
       </div>
       <AgentTraceModal trace={selectedTrace} onClose={() => setSelectedTrace(null)} />
-    </div>
+    </section>
   );
 }
 
@@ -680,6 +743,20 @@ function CleanProfile({ profile }) {
           </div>
         )}
 
+        {profile.others?.length > 0 && (
+          <div>
+            <div className="mb-2 text-sm font-semibold">Others</div>
+            <div className="grid gap-3 xl:grid-cols-2">
+              {profile.others.map((item, index) => (
+                <div key={`${item.title || "other"}-${index}`} className="rounded-md border border-line px-3 py-3">
+                  <div className="mb-1 text-sm font-semibold">{cleanInlineText(item.title || "Other")}</div>
+                  <TextWithBullets text={typeof item.content === "string" ? item.content : JSON.stringify(item.content)} compact />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <div className="mb-2 text-sm font-semibold">Skills</div>
           <SkillChips skills={profile.skills || []} />
@@ -687,7 +764,132 @@ function CleanProfile({ profile }) {
 
         <MergeTrust profile={profile} />
         <SemanticMappings profile={profile} />
-        <AgentOps profile={profile} />
+      </div>
+    </section>
+  );
+}
+
+function FieldCheckboxGroups({ title, description, fields, checkedMap, disabledMap = {}, onToggle }) {
+  return (
+    <div>
+      <div className="mb-2">
+        <div className="text-xs font-semibold uppercase tracking-normal text-slate-500">{title}</div>
+        {description && <div className="mt-1 text-xs leading-5 text-slate-500">{description}</div>}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {fields.map((field) => (
+          <label
+            key={field.path}
+            className={`flex min-w-0 items-start gap-2 rounded-md border border-line px-2.5 py-2 text-sm ${
+              disabledMap[field.path] ? "bg-slate-100 text-slate-400" : "bg-slate-50 text-slate-800"
+            }`}
+          >
+            <input
+              className="mt-1"
+              type="checkbox"
+              checked={Boolean(checkedMap[field.path])}
+              disabled={Boolean(disabledMap[field.path])}
+              onChange={(event) => onToggle(field.path, event.target.checked)}
+            />
+            <span className="min-w-0">
+              <span className="block font-medium">{field.label}</span>
+              <code className="block truncate text-xs text-slate-500">{field.path}</code>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CustomFieldSelector({
+  selectedFields,
+  keepEmptyFields,
+  fieldRenames,
+  onToggle,
+  onToggleKeepEmpty,
+  onRename,
+  onSelectAll,
+  onClearAll,
+  configPreview
+}) {
+  const groups = groupedCustomFields();
+  const selectedCount = CUSTOM_FIELD_OPTIONS.filter((field) => selectedFields[field.path]).length;
+  const disabledEmptyFields = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, !selectedFields[field.path]]));
+  return (
+    <section className="rounded-md border border-line">
+      <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <ListChecks size={16} />
+          Custom Output Fields
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">{selectedCount}/{CUSTOM_FIELD_OPTIONS.length}</span>
+          <button
+            type="button"
+            onClick={onSelectAll}
+            title="Select all fields"
+            className="rounded-md border border-line px-2 py-1 text-xs font-medium text-slate-700 hover:border-ink"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={onClearAll}
+            title="Clear all fields"
+            className="rounded-md border border-line p-1.5 text-slate-600 hover:border-ink"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="max-h-[520px] space-y-5 overflow-auto p-3">
+        {Object.entries(groups).map(([group, fields]) => (
+          <div key={group} className="space-y-4 rounded-md border border-line bg-white p-3">
+            <div className="text-sm font-semibold text-slate-800">{group}</div>
+            <FieldCheckboxGroups
+              title="1. Include In Custom Output"
+              description="Select the canonical fields that should be present in the generated custom structure."
+              fields={fields}
+              checkedMap={selectedFields}
+              onToggle={onToggle}
+            />
+            <FieldCheckboxGroups
+              title="2. Keep If Empty Or Null"
+              description="Enable this only for selected fields that must still appear as null when no value is extracted."
+              fields={fields}
+              checkedMap={keepEmptyFields}
+              disabledMap={disabledEmptyFields}
+              onToggle={onToggleKeepEmpty}
+            />
+            <div>
+              <div className="mb-2">
+                <div className="text-xs font-semibold uppercase tracking-normal text-slate-500">3. Rename Output Field</div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">Aliases affect only custom output keys; canonical names remain unchanged inside the engine.</div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {fields.map((field) => (
+                  <label key={field.path} className="block rounded-md border border-line bg-slate-50 px-2.5 py-2">
+                    <span className="mb-1 block truncate text-xs font-medium text-slate-600">{field.label}</span>
+                    <input
+                      className="w-full rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-ink disabled:bg-slate-100 disabled:text-slate-400"
+                      value={fieldRenames[field.path] ?? field.path}
+                      onChange={(event) => onRename(field.path, event.target.value)}
+                      disabled={!selectedFields[field.path]}
+                      placeholder={field.path}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-line bg-white p-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-normal text-slate-500">Generated Format</div>
+        <pre className="max-h-36 overflow-auto rounded-md bg-slate-950 p-3 text-[11px] leading-5 text-slate-100">
+          {JSON.stringify(configPreview, null, 2)}
+        </pre>
       </div>
     </section>
   );
@@ -698,24 +900,32 @@ export default function App() {
   const [githubUrl, setGithubUrl] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [defaultRegion, setDefaultRegion] = useState("US");
-  const [config, setConfig] = useState(SAMPLE_CONFIG);
-  const [useLlm, setUseLlm] = useState(false);
-  const [useGeminiHybrid, setUseGeminiHybrid] = useState(false);
-  const [useAgenticLlmpops, setUseAgenticLlmpops] = useState(false);
+  const [selectedFields, setSelectedFields] = useState(DEFAULT_SELECTED_FIELDS);
+  const [keepEmptyFields, setKeepEmptyFields] = useState(DEFAULT_KEEP_EMPTY_FIELDS);
+  const [fieldRenames, setFieldRenames] = useState(DEFAULT_FIELD_RENAMES);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
-  const fileNames = useMemo(() => files.map((file) => file.name).join(", "), [files]);
+  const customConfig = useMemo(() => buildCustomConfig(selectedFields, fieldRenames, keepEmptyFields), [selectedFields, fieldRenames, keepEmptyFields]);
 
   function updateFiles(fileList) {
-    const selected = Array.from(fileList || []);
-    if (selected.length > MAX_FILES) {
+    const incoming = Array.from(fileList || []);
+    const merged = [...files];
+    const seen = new Set(files.map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+    for (const file of incoming) {
+      const key = `${file.name}:${file.size}:${file.lastModified}`;
+      if (!seen.has(key)) {
+        merged.push(file);
+        seen.add(key);
+      }
+    }
+    if (merged.length > MAX_FILES) {
       setError(`Upload at most ${MAX_FILES} files.`);
-      setFiles(selected.slice(0, MAX_FILES));
+      setFiles(merged.slice(0, MAX_FILES));
       return;
     }
-    const invalid = selected.find((file) => {
+    const invalid = merged.find((file) => {
       const lower = file.name.toLowerCase();
       return !ACCEPTED_EXTENSIONS.some((extension) => lower.endsWith(extension));
     });
@@ -723,13 +933,37 @@ export default function App() {
       setError(`${invalid.name} is not supported. Use CSV, JSON, TXT, MD, or PDF.`);
       return;
     }
-    const oversized = selected.find((file) => file.size > MAX_FILE_BYTES);
+    const oversized = merged.find((file) => file.size > MAX_FILE_BYTES);
     if (oversized) {
       setError(`${oversized.name} exceeds the 10 MB file limit.`);
       return;
     }
     setError("");
-    setFiles(selected);
+    setFiles(merged);
+  }
+
+  function removeFile(fileToRemove) {
+    setFiles((current) => current.filter((file) => file !== fileToRemove));
+  }
+
+  function toggleCustomField(path, checked) {
+    setSelectedFields((current) => ({ ...current, [path]: checked }));
+  }
+
+  function toggleKeepEmptyField(path, checked) {
+    setKeepEmptyFields((current) => ({ ...current, [path]: checked }));
+  }
+
+  function renameCustomField(path, value) {
+    setFieldRenames((current) => ({ ...current, [path]: value }));
+  }
+
+  function selectAllCustomFields() {
+    setSelectedFields(DEFAULT_SELECTED_FIELDS);
+  }
+
+  function clearAllCustomFields() {
+    setSelectedFields(Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, false])));
   }
 
   async function submit(event) {
@@ -747,10 +981,7 @@ export default function App() {
     payload.append("github_url", githubUrl);
     payload.append("linkedin_url", linkedinUrl);
     payload.append("default_region", defaultRegion);
-    payload.append("use_llm", String(useLlm));
-    payload.append("use_gemini_hybrid", String(useGeminiHybrid));
-    payload.append("use_agentic_llmops", String(useAgenticLlmpops));
-    payload.append("config", config);
+    payload.append("config", JSON.stringify(customConfig));
 
     try {
       const response = await fetch("/api/transform", {
@@ -788,7 +1019,7 @@ export default function App() {
             <span className="mb-2 block text-sm font-medium">Sources</span>
             <div className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center">
               <UploadCloud size={26} className="text-slate-500" />
-              <span className="mt-2 max-w-full text-sm text-slate-700">{fileNames || "CSV, JSON, TXT, MD, or PDF"}</span>
+              <span className="mt-2 max-w-full text-sm text-slate-700">CSV, JSON, TXT, MD, or PDF</span>
               <span className="mt-1 text-xs text-slate-500">Max {MAX_FILES} files, 10 MB each</span>
               <input
                 className="sr-only"
@@ -798,6 +1029,26 @@ export default function App() {
                 onChange={(event) => updateFiles(event.target.files)}
               />
             </div>
+            {files.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {files.map((file) => (
+                  <div key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center justify-between gap-2 rounded-md border border-line bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-800">{file.name}</div>
+                      <div className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                    </div>
+                    <button
+                      type="button"
+                      title="Remove file"
+                      onClick={() => removeFile(file)}
+                      className="rounded-md border border-line p-1.5 text-slate-500 hover:border-ink hover:text-ink"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </label>
 
           <label className="block">
@@ -826,38 +1077,29 @@ export default function App() {
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3">
             <label className="block">
-              <span className="mb-2 block text-sm font-medium">Phone Region</span>
+              <span className="mb-2 block text-sm font-medium">Default Phone Region</span>
               <input
                 className="w-full rounded-md border border-line px-3 py-2 text-sm uppercase outline-none focus:border-ink"
                 value={defaultRegion}
                 onChange={(event) => setDefaultRegion(event.target.value.toUpperCase())}
               />
-            </label>
-            <label className="flex items-end gap-2 rounded-md border border-line px-3 py-2 text-sm">
-              <input type="checkbox" checked={useLlm} onChange={(event) => setUseLlm(event.target.checked)} />
-              LLM extractor
-            </label>
-            <label className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">
-              <input type="checkbox" checked={useGeminiHybrid} onChange={(event) => setUseGeminiHybrid(event.target.checked)} />
-              Gemini hybrid
-            </label>
-            <label className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-sm">
-              <input type="checkbox" checked={useAgenticLlmpops} onChange={(event) => setUseAgenticLlmpops(event.target.checked)} />
-              Agent evaluator
+              <span className="mt-1 block text-xs text-slate-500">Used only when a phone number has no country code.</span>
             </label>
           </div>
 
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium">Custom Config</span>
-            <textarea
-              className="h-72 w-full resize-y rounded-md border border-line bg-slate-50 px-3 py-2 font-mono text-xs leading-5 outline-none focus:border-ink"
-              value={config}
-              onChange={(event) => setConfig(event.target.value)}
-              spellCheck="false"
-            />
-          </label>
+          <CustomFieldSelector
+            selectedFields={selectedFields}
+            keepEmptyFields={keepEmptyFields}
+            fieldRenames={fieldRenames}
+            onToggle={toggleCustomField}
+            onToggleKeepEmpty={toggleKeepEmptyField}
+            onRename={renameCustomField}
+            onSelectAll={selectAllCustomFields}
+            onClearAll={clearAllCustomFields}
+            configPreview={customConfig}
+          />
 
           <button
             type="submit"
@@ -873,10 +1115,11 @@ export default function App() {
         </form>
 
         <div className="space-y-5">
+          <JsonPanel title="Custom Output" data={result?.custom_output} />
+          {result && <AgentOps diagnostics={result?.agent_diagnostics} />}
           <CleanProfile profile={result?.default_profile} />
-          <div className="grid gap-5 xl:grid-cols-2">
+          <div className="grid gap-5">
             <JsonPanel title="Canonical Profile" data={result?.default_profile} />
-            <JsonPanel title="Custom Output" data={result?.custom_output} />
           </div>
         </div>
       </div>

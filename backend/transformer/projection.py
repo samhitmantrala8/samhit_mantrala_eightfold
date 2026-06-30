@@ -107,12 +107,13 @@ def project_profile(profile: dict[str, Any], config: dict[str, Any] | None, defa
         value = read_path(profile, source_path)
         value = normalize_projected(value, field.get("normalize"), default_region)
 
+        field_on_missing = field.get("on_missing", on_missing)
         if missing(value):
-            if field.get("required") or on_missing == "error":
+            if field.get("required") or field_on_missing == "error":
                 errors.append(f"Missing required field: {target_path} from {source_path}")
-                if on_missing == "error":
+                if field_on_missing == "error":
                     continue
-            if on_missing == "omit":
+            if field_on_missing == "omit":
                 continue
             value = None
 
@@ -126,4 +127,3 @@ def project_profile(profile: dict[str, Any], config: dict[str, Any] | None, defa
     if config.get("include_provenance"):
         output["provenance"] = profile.get("provenance", [])
     return output, errors
-

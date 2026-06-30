@@ -10,8 +10,6 @@ MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 
 def validate_default_profile(profile: dict[str, Any]) -> list[str]:
     errors: list[str] = []
-    if not isinstance(profile.get("candidate_id"), str) or not profile["candidate_id"]:
-        errors.append("candidate_id must be a non-empty string")
     if profile.get("full_name") is not None and not isinstance(profile["full_name"], str):
         errors.append("full_name must be string or null")
     if not isinstance(profile.get("emails"), list):
@@ -38,6 +36,11 @@ def validate_default_profile(profile: dict[str, Any]) -> list[str]:
         errors.append("projects must be a list")
     if not isinstance(profile.get("achievements", []), list):
         errors.append("achievements must be a list")
+    for key in ("certifications", "publications", "github_repositories", "languages", "extracurriculars", "other_sections", "others"):
+        if not isinstance(profile.get(key, []), list):
+            errors.append(f"{key} must be a list")
+    if not isinstance(profile.get("online_coding_profile", {}), dict):
+        errors.append("online_coding_profile must be an object")
     if not isinstance(profile.get("overall_confidence"), (int, float)):
         errors.append("overall_confidence must be numeric")
     if profile.get("profile_summary") is not None and not isinstance(profile["profile_summary"], str):
