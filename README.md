@@ -13,7 +13,7 @@ The implementation supports:
 - Recruiter CSV export
 - ATS JSON blob
 - Recruiter notes TXT/MD
-- PDF resume text extraction
+- PDF and DOCX resume text extraction
 - GitHub profile, public repository, project, and language enrichment through the public GitHub API, either from the URL field or from a GitHub URL found in uploaded text
 - LinkedIn profile URL normalization/storage when a real `linkedin.com/...` URL is supplied
 - Codeforces profile enrichment through the official Codeforces API when a handle/profile URL is found
@@ -66,7 +66,7 @@ Main endpoint:
 ```text
 POST /api/transform
 multipart form fields:
-- files: one or more CSV, JSON, TXT, MD, or PDF files, max 5 files and 10 MB each
+- files: one or more CSV, JSON, TXT, MD, PDF, or DOCX files, max 5 files and 10 MB each
 - config: optional runtime projection JSON
 - github_url: optional GitHub profile URL
 - linkedin_url: optional LinkedIn profile URL

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_FILES = 5
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-SUPPORTED_UPLOAD_SUFFIXES = {".csv", ".json", ".txt", ".md", ".pdf"}
+SUPPORTED_UPLOAD_SUFFIXES = {".csv", ".json", ".txt", ".md", ".pdf", ".docx"}
 
 
 def create_app() -> Flask:
@@ -101,7 +101,7 @@ def create_app() -> Flask:
                 suffix = Path(safe_name).suffix.lower()
                 if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
                     logger.warning("[%s] rejected file name=%s suffix=%s unsupported", request_id, safe_name, suffix)
-                    return jsonify({"error": f"{safe_name}: unsupported file type. Use CSV, JSON, TXT, MD, or PDF."}), 400
+                    return jsonify({"error": f"{safe_name}: unsupported file type. Use CSV, JSON, TXT, MD, PDF, or DOCX."}), 400
                 destination = Path(tmp) / safe_name
                 file.save(destination)
                 size = destination.stat().st_size

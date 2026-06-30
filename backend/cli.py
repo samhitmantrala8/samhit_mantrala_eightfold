@@ -11,7 +11,7 @@ from backend.transformer.pipeline import transform_paths
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Transform messy candidate inputs into a canonical profile.")
-    parser.add_argument("--inputs", nargs="+", required=True, help="Input files such as CSV, JSON, or TXT.")
+    parser.add_argument("--inputs", nargs="+", required=True, help="Input files such as CSV, JSON, TXT, PDF, or DOCX.")
     parser.add_argument("--config", help="Optional custom output config JSON.")
     parser.add_argument("--github-url", help="Optional GitHub profile URL.")
     parser.add_argument("--linkedin-url", help="Optional LinkedIn profile URL.")

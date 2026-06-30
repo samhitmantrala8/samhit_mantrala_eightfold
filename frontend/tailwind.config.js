@@ -7,10 +7,11 @@ export default {
         ink: "#172033",
         line: "#d9dee8",
         mint: "#18a57a",
-        coral: "#ef6b5b"
+        coral: "#ef6b5b",
+        accent: "#f97316",
+        accentDark: "#c2410c"
       }
     }
   },
   plugins: []
 };
-

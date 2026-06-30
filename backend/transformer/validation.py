@@ -10,6 +10,8 @@ MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 
 def validate_default_profile(profile: dict[str, Any]) -> list[str]:
     errors: list[str] = []
+    if not isinstance(profile.get("candidate_id"), str) or not profile.get("candidate_id"):
+        errors.append("candidate_id must be a non-empty string")
     if profile.get("full_name") is not None and not isinstance(profile["full_name"], str):
         errors.append("full_name must be string or null")
     if not isinstance(profile.get("emails"), list):

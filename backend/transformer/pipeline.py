@@ -11,6 +11,7 @@ from backend.transformer.agentic_llmops import run_agentic_llmops
 from backend.transformer.extractors.ats_json_extractor import extract_ats_json
 from backend.transformer.extractors.codeforces_extractor import extract_codeforces, extract_codeforces_handles
 from backend.transformer.extractors.csv_extractor import extract_csv
+from backend.transformer.extractors.docx_extractor import extract_docx, extract_docx_text
 from backend.transformer.extractors.github_extractor import extract_github
 from backend.transformer.extractors.notes_extractor import extract_notes, extract_notes_from_text
 from backend.transformer.extractors.pdf_extractor import extract_pdf, extract_pdf_text
@@ -41,6 +42,15 @@ KNOWN_RESUME_SECTION_LABELS = {
 }
 
 
+TEXT_RESUME_SUFFIXES = {".txt", ".md", ".pdf", ".docx"}
+
+
+def move_candidate_id_to_bottom(profile: dict) -> None:
+    candidate_id = profile.pop("candidate_id", None)
+    if candidate_id is not None:
+        profile["candidate_id"] = candidate_id
+
+
 def extract_from_path(path: Path, use_llm: bool = False) -> ExtractionBundle:
     suffix = path.suffix.lower()
     logger.info("extract_from_path start file=%s suffix=%s use_llm=%s", path.name, suffix, use_llm)
@@ -52,6 +62,8 @@ def extract_from_path(path: Path, use_llm: bool = False) -> ExtractionBundle:
         bundle = extract_notes(path, use_llm=use_llm)
     elif suffix == ".pdf":
         bundle = extract_pdf(path, use_llm=use_llm)
+    elif suffix == ".docx":
+        bundle = extract_docx(path, use_llm=use_llm)
     else:
         bundle = ExtractionBundle([], [f"{path.name}: unsupported source type"])
     logger.info("extract_from_path done file=%s facts=%s errors=%s", path.name, len(bundle.facts), len(bundle.errors))
@@ -76,6 +88,14 @@ def text_from_path(path: Path) -> str | None:
         try:
             text = extract_pdf_text(path)
             logger.info("text_from_path done file=%s chars=%s pdf=true", path.name, len(text))
+            return text
+        except Exception as exc:
+            logger.exception("text_from_path failed file=%s error=%s", path.name, exc)
+            return None
+    if path.suffix.lower() == ".docx":
+        try:
+            text = extract_docx_text(path)
+            logger.info("text_from_path done file=%s chars=%s docx=true", path.name, len(text))
             return text
         except Exception as exc:
             logger.exception("text_from_path failed file=%s error=%s", path.name, exc)
@@ -174,14 +194,14 @@ def transform_paths(
         source_text = text_from_path(path)
         if source_text:
             source = f"{path.suffix.lower().lstrip('.') or 'text'}:{path.name}"
-            if use_gemini_hybrid and path.suffix.lower() in {".txt", ".md", ".pdf"}:
+            if use_gemini_hybrid and path.suffix.lower() in TEXT_RESUME_SUFFIXES:
                 logger.info("gemini semantic mapping start source=%s chars=%s", source, len(source_text))
                 source_text, mappings, gemini_errors = canonicalize_section_headings(source_text, source)
                 semantic_mappings.extend(mappings)
                 extraction_errors.extend(gemini_errors)
                 logger.info("gemini semantic mapping done source=%s mappings=%s errors=%s", source, len(mappings), len(gemini_errors))
             source_texts.append(source_text)
-            if path.suffix.lower() in {".txt", ".md", ".pdf"}:
+            if path.suffix.lower() in TEXT_RESUME_SUFFIXES:
                 logger.info("notes extraction start source=%s use_llm=%s", source, use_llm)
                 bundle = extract_notes_from_text(source_text, source, use_llm=use_llm)
                 raw_facts.extend(bundle.facts)
@@ -332,6 +352,7 @@ def transform_paths(
         default_profile.pop("llmops", None)
 
     default_profile["extraction_errors"] = extraction_errors
+    move_candidate_id_to_bottom(default_profile)
     logger.info("validation start")
     validation_errors = validate_default_profile(default_profile)
     logger.info("validation done validation_errors=%s", len(validation_errors))

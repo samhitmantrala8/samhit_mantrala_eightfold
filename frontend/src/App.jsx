@@ -28,7 +28,7 @@ import {
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const ACCEPTED_EXTENSIONS = [".csv", ".json", ".txt", ".md", ".pdf"];
+const ACCEPTED_EXTENSIONS = [".csv", ".json", ".txt", ".md", ".pdf", ".docx"];
 const CUSTOM_FIELD_OPTIONS = [
   { group: "Identity", label: "Full Name", path: "full_name", type: "string" },
   { group: "Identity", label: "Headline", path: "headline", type: "string" },
@@ -61,7 +61,8 @@ const CUSTOM_FIELD_OPTIONS = [
   { group: "Diagnostics", label: "Provenance", path: "provenance", type: "object[]" },
   { group: "Diagnostics", label: "Resume Sections", path: "resume_sections", type: "object" },
   { group: "Diagnostics", label: "Semantic Mappings", path: "semantic_mappings", type: "object[]" },
-  { group: "Diagnostics", label: "Extraction Errors", path: "extraction_errors", type: "string[]" }
+  { group: "Diagnostics", label: "Extraction Errors", path: "extraction_errors", type: "string[]" },
+  { group: "Metadata", label: "Candidate ID", path: "candidate_id", type: "string" }
 ];
 const DEFAULT_SELECTED_FIELDS = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, true]));
 const DEFAULT_FIELD_RENAMES = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((field) => [field.path, field.path]));
@@ -69,7 +70,7 @@ const DEFAULT_KEEP_EMPTY_FIELDS = Object.fromEntries(CUSTOM_FIELD_OPTIONS.map((f
 
 function JsonPanel({ title, data }) {
   return (
-    <section className="rounded-lg border border-line bg-white">
+    <section className="rounded-lg border border-line bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <FileJson size={17} />
@@ -209,7 +210,7 @@ function MergeTrust({ profile }) {
         Merge & Trust
       </div>
       <div className="overflow-hidden rounded-md border border-line">
-        <div className="grid grid-cols-[1.1fr_1.4fr_1.2fr_80px] border-b border-line bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+        <div className="grid grid-cols-[1.1fr_1.4fr_1.2fr_80px] border-b border-line bg-orange-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-600">
           <div>Field</div>
           <div>Source</div>
           <div>Method</div>
@@ -241,7 +242,7 @@ function SemanticMappings({ profile }) {
         Gemini Semantic Decisions
       </div>
       <div className="overflow-hidden rounded-md border border-line">
-        <div className="grid grid-cols-[1.2fr_0.8fr_1fr_70px_70px] border-b border-line bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
+        <div className="grid grid-cols-[1.2fr_0.8fr_1fr_70px_70px] border-b border-line bg-orange-50 px-3 py-2 text-xs font-semibold uppercase tracking-normal text-slate-600">
           <div>Input</div>
           <div>Kind</div>
           <div>Mapped To</div>
@@ -930,7 +931,7 @@ export default function App() {
       return !ACCEPTED_EXTENSIONS.some((extension) => lower.endsWith(extension));
     });
     if (invalid) {
-      setError(`${invalid.name} is not supported. Use CSV, JSON, TXT, MD, or PDF.`);
+      setError(`${invalid.name} is not supported. Use CSV, JSON, TXT, MD, PDF, or DOCX.`);
       return;
     }
     const oversized = merged.find((file) => file.size > MAX_FILE_BYTES);
@@ -1000,7 +1001,7 @@ export default function App() {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b border-line bg-white">
+      <header className="border-b border-orange-100 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-5 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-normal">Multi-Source Candidate Transformer</h1>
@@ -1014,18 +1015,18 @@ export default function App() {
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 lg:grid-cols-[420px_1fr]">
-        <form onSubmit={submit} className="space-y-4 rounded-lg border border-line bg-white p-4">
+        <form onSubmit={submit} className="space-y-4 rounded-lg border border-orange-100 bg-white p-4 shadow-sm">
           <label className="block">
             <span className="mb-2 block text-sm font-medium">Sources</span>
-            <div className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center">
-              <UploadCloud size={26} className="text-slate-500" />
-              <span className="mt-2 max-w-full text-sm text-slate-700">CSV, JSON, TXT, MD, or PDF</span>
+            <div className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-orange-300 bg-orange-50/70 px-4 py-5 text-center transition hover:border-orange-400 hover:bg-orange-100/70">
+              <UploadCloud size={26} className="text-accent" />
+              <span className="mt-2 max-w-full text-sm text-slate-700">CSV, JSON, TXT, MD, PDF, or DOCX</span>
               <span className="mt-1 text-xs text-slate-500">Max {MAX_FILES} files, 10 MB each</span>
               <input
                 className="sr-only"
                 type="file"
                 multiple
-                accept=".csv,.json,.txt,.md,.pdf"
+                accept=".csv,.json,.txt,.md,.pdf,.docx"
                 onChange={(event) => updateFiles(event.target.files)}
               />
             </div>
@@ -1105,7 +1106,7 @@ export default function App() {
             type="submit"
             disabled={loading}
             title="Run transformer"
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-ink px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-70"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accentDark disabled:cursor-wait disabled:opacity-70"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
             Transform

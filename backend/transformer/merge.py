@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import defaultdict
 from typing import Any
 
@@ -10,6 +12,8 @@ SOURCE_WEIGHTS = {
     "ats": 0.06,
     "csv": 0.05,
     "github": 0.01,
+    "docx": -0.02,
+    "pdf": -0.02,
     "notes": -0.02,
 }
 
@@ -43,6 +47,18 @@ def provenance_entry(fact: ExtractedFact) -> dict[str, Any]:
     if fact.evidence:
         entry["evidence"] = fact.evidence[:180]
     return entry
+
+
+def stable_candidate_id(facts: list[ExtractedFact]) -> str:
+    anchors: list[str] = []
+    for fact in facts:
+        if fact.field in {"emails", "phones", "full_name", "links.github", "links.linkedin"} and fact.value:
+            anchors.append(f"{fact.field}:{str(fact.value).strip().lower()}")
+    if not anchors:
+        anchors = [f"{fact.source}:{fact.field}:{json.dumps(fact.value, sort_keys=True, default=str)}" for fact in facts[:20]]
+    raw = "|".join(sorted(anchors)) or "empty-candidate"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    return f"cand_{digest}"
 
 
 def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None = None) -> dict[str, Any]:
@@ -226,4 +242,5 @@ def merge_facts(facts: list[ExtractedFact], extraction_errors: list[str] | None 
     if profile["skills"]:
         confidence_components.append(sum(skill["confidence"] for skill in profile["skills"]) / len(profile["skills"]))
     profile["overall_confidence"] = round(sum(confidence_components) / len(confidence_components), 3) if confidence_components else 0.0
+    profile["candidate_id"] = stable_candidate_id(facts)
     return profile

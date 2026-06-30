@@ -126,4 +126,7 @@ def project_profile(profile: dict[str, Any], config: dict[str, Any] | None, defa
         output["overall_confidence"] = profile.get("overall_confidence")
     if config.get("include_provenance"):
         output["provenance"] = profile.get("provenance", [])
+    if "candidate_id" in output:
+        candidate_id = output.pop("candidate_id")
+        output["candidate_id"] = candidate_id
     return output, errors
